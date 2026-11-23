@@ -1,0 +1,184 @@
+using System.IO;
+using System.Windows;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using ClipNest;
+using ClipNest.Models;
+using ClipNest.Services;
+using ClipNest.ViewModels;
+
+namespace UiSnapshot;
+
+internal static class Program
+{
+    [STAThread]
+    private static void Main(string[] args)
+    {
+        var editMode = args.Contains("--edit", StringComparer.OrdinalIgnoreCase);
+        var imageEditMode = args.Contains("--edit-image", StringComparer.OrdinalIgnoreCase);
+        var outputArgument = args.FirstOrDefault(argument => !argument.StartsWith("--", StringComparison.Ordinal));
+        var outputPath = outputArgument is not null
+            ? Path.GetFullPath(outputArgument)
+            : Path.GetFullPath(Path.Combine(
+                AppContext.BaseDirectory,
+                "..", "..", "..", "..", "..",
+                "docs",
+                imageEditMode
+                    ? "clipnest-image-edit.png"
+                    : editMode
+                        ? "clipnest-edit.png"
+                        : "clipnest-screenshot.png"));
+
+        var application = new System.Windows.Application
+        {
+            ShutdownMode = ShutdownMode.OnExplicitShutdown
+        };
+        application.Resources.MergedDictionaries.Add(new ResourceDictionary
+        {
+            Source = new Uri(
+                "pack://application:,,,/ClipNest;component/Themes/Theme.xaml",
+                UriKind.Absolute)
+        });
+
+        var tempDirectory = Path.Combine(Path.GetTempPath(), $"ClipNest.UiSnapshot.{Guid.NewGuid():N}");
+        var historyStore = new HistoryStore(Path.Combine(tempDirectory, "history.json"));
+        var settingsStore = new SettingsStore(Path.Combine(tempDirectory, "settings.json"));
+        var clipboard = new PreviewClipboardService();
+        using var viewModel = new MainViewModel(clipboard, []);
+        using var window = new MainWindow(
+            viewModel,
+            clipboard,
+            historyStore,
+            settingsStore,
+            new AppSettings());
+
+        clipboard.Emit(ClipContent.FromText("把灵感收进 ClipNest，需要时随手取用。"));
+        clipboard.Emit(ClipContent.FromText(
+            "窗口支持任意拖动、双击隐藏，F4 随时唤醒。",
+            @"{\rtf1\ansi ClipNest}",
+            "<b>ClipNest</b>"));
+        clipboard.Emit(ClipContent.FromText(
+            "dotnet publish ClipNest -p:PublishProfile=FrameworkDependent-Windows -c Release",
+            @"{\rtf1\ansi dotnet publish}",
+            "<code>dotnet publish</code>"));
+        clipboard.Emit(ClipContent.FromImage(CreateSampleImage(), 320, 200));
+        clipboard.Emit(ClipContent.FromText("https://github.com/"));
+        clipboard.Emit(ClipContent.FromText("第五项：紧凑视口默认展示最近五条记录。"));
+        viewModel.TogglePinCommand.Execute(viewModel.Items[2]);
+
+        if (editMode)
+        {
+            viewModel.EditCommand.Execute(viewModel.Items.First(item => item.IsText));
+        }
+        else if (imageEditMode)
+        {
+            viewModel.EditCommand.Execute(viewModel.Items.First(item => item.IsImage));
+        }
+
+        window.Width = 450;
+        window.Height = 300;
+
+        var content = (FrameworkElement)window.Content;
+        content.Measure(new Size(450, 300));
+        content.Arrange(new Rect(0, 0, 450, 300));
+        content.UpdateLayout();
+
+        var renderedWindow = new RenderTargetBitmap(900, 600, 192, 192, PixelFormats.Pbgra32);
+        renderedWindow.Render(content);
+
+        var composition = new DrawingVisual();
+        using (var context = composition.RenderOpen())
+        {
+            context.DrawRectangle(
+                new SolidColorBrush(Color.FromRgb(222, 233, 228)),
+                null,
+                new Rect(0, 0, 900, 600));
+            context.DrawImage(renderedWindow, new Rect(0, 0, 900, 600));
+        }
+
+        var final = new RenderTargetBitmap(900, 600, 96, 96, PixelFormats.Pbgra32);
+        final.Render(composition);
+
+        Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(final));
+        using var stream = File.Create(outputPath);
+        encoder.Save(stream);
+
+        window.Dispose();
+        historyStore.Dispose();
+        application.Shutdown();
+        Console.WriteLine($"Wrote {outputPath}");
+    }
+
+    private static byte[] CreateSampleImage()
+    {
+        var visual = new DrawingVisual();
+        using (var context = visual.RenderOpen())
+        {
+            context.DrawRoundedRectangle(
+                new SolidColorBrush(Color.FromRgb(245, 249, 247)),
+                null,
+                new Rect(0, 0, 320, 200),
+                18,
+                18);
+            context.DrawEllipse(
+                new SolidColorBrush(Color.FromRgb(23, 109, 105)),
+                null,
+                new Point(88, 102),
+                54,
+                54);
+            context.DrawRoundedRectangle(
+                new SolidColorBrush(Color.FromRgb(223, 96, 73)),
+                null,
+                new Rect(124, 68, 110, 68),
+                16,
+                16);
+            var text = new FormattedText(
+                "CLIP",
+                System.Globalization.CultureInfo.InvariantCulture,
+                FlowDirection.LeftToRight,
+                new Typeface("Segoe UI"),
+                26,
+                Brushes.White,
+                96);
+            context.DrawText(text, new Point(144, 88));
+        }
+
+        var bitmap = new RenderTargetBitmap(320, 200, 96, 96, PixelFormats.Pbgra32);
+        bitmap.Render(visual);
+
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        using var stream = new MemoryStream();
+        encoder.Save(stream);
+        return stream.ToArray();
+    }
+
+    private sealed class PreviewClipboardService : IClipboardService
+    {
+        public event EventHandler<ClipContent>? ContentChanged;
+
+        public void Attach(Window window)
+        {
+        }
+
+        public void Detach()
+        {
+        }
+
+        public bool Copy(ClipItem item, bool includeFormatting)
+        {
+            return true;
+        }
+
+        public void Emit(ClipContent content)
+        {
+            ContentChanged?.Invoke(this, content);
+        }
+
+        public void Dispose()
+        {
+        }
+    }
+}

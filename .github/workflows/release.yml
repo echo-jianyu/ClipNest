@@ -1,0 +1,58 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore ClipNest.slnx
+
+      - name: Build
+        run: dotnet build ClipNest.slnx -c Release --no-restore
+
+      - name: Test
+        run: dotnet test ClipNest.slnx -c Release --no-build
+
+      - name: Publish
+        run: >
+          dotnet publish ClipNest/ClipNest.csproj
+          -c Release
+          -p:PublishProfile=FrameworkDependent-Windows
+          -p:DebugType=None
+          -o artifacts/windows
+
+      - name: Package
+        shell: powershell
+        run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart("v")
+          Compress-Archive `
+            -Path artifacts/windows/* `
+            -DestinationPath "artifacts/ClipNest-$version-windows.zip" `
+            -Force
+
+      - name: Create GitHub release
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart("v")
+          gh release create $env:GITHUB_REF_NAME `
+            "artifacts/ClipNest-$version-windows.zip" `
+            --title "ClipNest $version" `
+            --generate-notes

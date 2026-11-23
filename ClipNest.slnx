@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="ClipNest.Tests/ClipNest.Tests.csproj" />
+  <Project Path="ClipNest/ClipNest.csproj" />
+</Solution>

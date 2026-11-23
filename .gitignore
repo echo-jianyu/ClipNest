@@ -1,0 +1,17 @@
+bin/
+obj/
+artifacts/
+publish/
+.vs/
+.idea/
+*.user
+*.suo
+*.DotSettings.user
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+Thumbs.db
+Desktop.ini
+.DS_Store
+screenshots/*.tmp.png
