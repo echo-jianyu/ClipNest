@@ -24,6 +24,7 @@ public partial class App : System.Windows.Application, IDisposable
     private Forms.ContextMenuStrip? _trayMenu;
     private Drawing.Icon? _trayDrawingIcon;
     private Forms.ToolStripMenuItem? _showHideMenuItem;
+    private Forms.ToolStripMenuItem? _settingsMenuItem;
     private Forms.ToolStripMenuItem? _clearHistoryMenuItem;
     private HistoryStore? _historyStore;
     private MainViewModel? _viewModel;
@@ -60,6 +61,7 @@ public partial class App : System.Windows.Application, IDisposable
                 _historyStore,
                 settingsStore,
                 settings);
+            _mainWindow.HotKeyChanged += MainWindow_HotKeyChanged;
 
             MainWindow = _mainWindow;
             InitializeTrayIcon();
@@ -226,34 +228,31 @@ public partial class App : System.Windows.Application, IDisposable
         using var iconStream = iconResource.Stream;
         _trayDrawingIcon = new Drawing.Icon(iconStream);
 
-        _trayMenu = new Forms.ContextMenuStrip
-        {
-            ShowImageMargin = false,
-            ShowCheckMargin = false,
-            Font = new Drawing.Font("Microsoft YaHei UI", 10.5f),
-            BackColor = Drawing.Color.White,
-            ForeColor = Drawing.Color.FromArgb(29, 40, 42),
-            Padding = Forms.Padding.Empty,
-            Renderer = new BorderlessTrayMenuRenderer()
-        };
+        _trayMenu = new ClipNestTrayMenu();
 
         _showHideMenuItem = CreateTrayMenuItem("隐藏 ClipNest");
         _showHideMenuItem.Click += (_, _) => ToggleWindowFromTray();
+        _settingsMenuItem = CreateTrayMenuItem("设置...");
+        _settingsMenuItem.Click += (_, _) => OpenSettingsFromTray();
         _clearHistoryMenuItem = CreateTrayMenuItem("清空历史");
         _clearHistoryMenuItem.Click += (_, _) => ClearHistoryFromTray();
         var exitMenuItem = CreateTrayMenuItem("退出");
         exitMenuItem.Click += async (_, _) => await ExitApplicationAsync();
 
         _trayMenu.Items.Add(_showHideMenuItem);
+        _trayMenu.Items.Add(_settingsMenuItem);
         _trayMenu.Items.Add(_clearHistoryMenuItem);
-        _trayMenu.Items.Add(new Forms.ToolStripSeparator());
+        _trayMenu.Items.Add(new Forms.ToolStripSeparator
+        {
+            Margin = new Forms.Padding(5, 3, 5, 3)
+        });
         _trayMenu.Items.Add(exitMenuItem);
         _trayMenu.Opening += (_, _) => UpdateTrayMenuState();
 
         _trayIcon = new Forms.NotifyIcon
         {
             Icon = _trayDrawingIcon,
-            Text = "ClipNest · F4 显示或隐藏",
+            Text = "ClipNest",
             Visible = true,
             ContextMenuStrip = _trayMenu
         };
@@ -272,27 +271,155 @@ public partial class App : System.Windows.Application, IDisposable
         {
             AutoSize = true,
             Padding = new Forms.Padding(11, 7, 11, 7),
-            Margin = Forms.Padding.Empty
+            Margin = Forms.Padding.Empty,
+            TextAlign = Drawing.ContentAlignment.MiddleCenter
         };
     }
 
-    private sealed class BorderlessTrayMenuRenderer : Forms.ToolStripProfessionalRenderer
+    private static Drawing.Drawing2D.GraphicsPath CreateRoundedRectangle(
+        Drawing.Rectangle bounds,
+        int radius)
+    {
+        var diameter = Math.Max(1, radius * 2);
+        var path = new Drawing.Drawing2D.GraphicsPath();
+        path.AddArc(bounds.Left, bounds.Top, diameter, diameter, 180, 90);
+        path.AddArc(bounds.Right - diameter, bounds.Top, diameter, diameter, 270, 90);
+        path.AddArc(
+            bounds.Right - diameter,
+            bounds.Bottom - diameter,
+            diameter,
+            diameter,
+            0,
+            90);
+        path.AddArc(bounds.Left, bounds.Bottom - diameter, diameter, diameter, 90, 90);
+        path.CloseFigure();
+        return path;
+    }
+
+    private sealed class ClipNestTrayMenu : Forms.ContextMenuStrip
+    {
+        public ClipNestTrayMenu()
+        {
+            ShowImageMargin = false;
+            ShowCheckMargin = false;
+            Font = new Drawing.Font("Microsoft YaHei UI", 10.5f);
+            BackColor = Drawing.Color.White;
+            ForeColor = Drawing.Color.FromArgb(29, 40, 42);
+            MinimumSize = new Drawing.Size(190, 0);
+            Padding = new Forms.Padding(5, 4, 5, 4);
+            DropShadowEnabled = true;
+            Renderer = new ClipNestTrayMenuRenderer();
+        }
+
+        protected override void OnHandleCreated(EventArgs eventArgs)
+        {
+            base.OnHandleCreated(eventArgs);
+            UpdateRoundedRegion();
+        }
+
+        protected override void OnSizeChanged(EventArgs eventArgs)
+        {
+            base.OnSizeChanged(eventArgs);
+            UpdateRoundedRegion();
+        }
+
+        private void UpdateRoundedRegion()
+        {
+            if (Width <= 1 || Height <= 1)
+            {
+                return;
+            }
+
+            using var path = CreateRoundedRectangle(
+                new Drawing.Rectangle(0, 0, Width, Height),
+                radius: 9);
+            var previous = Region;
+            Region = new Drawing.Region(path);
+            previous?.Dispose();
+        }
+    }
+
+    private sealed class ClipNestTrayMenuRenderer : Forms.ToolStripProfessionalRenderer
     {
         private static readonly Drawing.Color Highlight =
             Drawing.Color.FromArgb(229, 242, 237);
+        private static readonly Drawing.Color Border =
+            Drawing.Color.FromArgb(229, 233, 230);
 
-        public BorderlessTrayMenuRenderer()
+        public ClipNestTrayMenuRenderer()
             : base(new TrayMenuColorTable())
         {
             RoundedEdges = false;
         }
 
+        protected override void OnRenderToolStripBackground(
+            Forms.ToolStripRenderEventArgs e)
+        {
+            using var brush = new Drawing.SolidBrush(Drawing.Color.White);
+            e.Graphics.FillRectangle(brush, e.ToolStrip.ClientRectangle);
+        }
+
+        protected override void OnRenderToolStripBorder(
+            Forms.ToolStripRenderEventArgs e)
+        {
+            if (e.ToolStrip.Width < 4 || e.ToolStrip.Height < 4)
+            {
+                return;
+            }
+
+            using var path = CreateRoundedRectangle(
+                new Drawing.Rectangle(
+                    1,
+                    1,
+                    e.ToolStrip.Width - 3,
+                    e.ToolStrip.Height - 3),
+                radius: 8);
+            using var pen = new Drawing.Pen(Border);
+            e.Graphics.DrawPath(pen, path);
+        }
+
         protected override void OnRenderMenuItemBackground(Forms.ToolStripItemRenderEventArgs e)
         {
-            var bounds = new Drawing.Rectangle(Drawing.Point.Empty, e.Item.Size);
-            using var brush = new Drawing.SolidBrush(
-                e.Item.Selected ? Highlight : Drawing.Color.White);
-            e.Graphics.FillRectangle(brush, bounds);
+            var bounds = new Drawing.Rectangle(
+                3,
+                1,
+                Math.Max(1, e.Item.Width - 6),
+                Math.Max(1, e.Item.Height - 2));
+            if (!e.Item.Selected)
+            {
+                using var background = new Drawing.SolidBrush(Drawing.Color.White);
+                e.Graphics.FillRectangle(background, bounds);
+                return;
+            }
+
+            using var path = CreateRoundedRectangle(bounds, radius: 5);
+            using var highlight = new Drawing.SolidBrush(Highlight);
+            e.Graphics.FillPath(highlight, path);
+        }
+
+        protected override void OnRenderSeparator(
+            Forms.ToolStripSeparatorRenderEventArgs e)
+        {
+            var y = e.Item.Height / 2;
+            using var pen = new Drawing.Pen(Border);
+            e.Graphics.DrawLine(pen, 10, y, Math.Max(10, e.Item.Width - 10), y);
+        }
+
+        protected override void OnRenderItemText(Forms.ToolStripItemTextRenderEventArgs e)
+        {
+            e.TextColor = e.Item.Enabled
+                ? Drawing.Color.FromArgb(29, 40, 42)
+                : Drawing.Color.FromArgb(111, 125, 127);
+            e.TextRectangle = new Drawing.Rectangle(
+                0,
+                0,
+                e.ToolStrip.ClientSize.Width,
+                e.Item.Height);
+            e.TextFormat = Forms.TextFormatFlags.HorizontalCenter
+                | Forms.TextFormatFlags.VerticalCenter
+                | Forms.TextFormatFlags.SingleLine
+                | Forms.TextFormatFlags.NoPrefix;
+            base.OnRenderItemText(e);
         }
     }
 
@@ -312,6 +439,10 @@ public partial class App : System.Windows.Application, IDisposable
 
         public override Drawing.Color MenuBorder => Drawing.Color.Transparent;
 
+        public override Drawing.Color SeparatorDark => Drawing.Color.FromArgb(229, 233, 230);
+
+        public override Drawing.Color SeparatorLight => Drawing.Color.FromArgb(229, 233, 230);
+
         public override Drawing.Color ImageMarginGradientBegin => Drawing.Color.White;
 
         public override Drawing.Color ImageMarginGradientMiddle => Drawing.Color.White;
@@ -328,6 +459,20 @@ public partial class App : System.Windows.Application, IDisposable
 
         _showHideMenuItem.Text = _mainWindow.IsVisible ? "隐藏 ClipNest" : "显示 ClipNest";
         _clearHistoryMenuItem!.Enabled = _viewModel?.Items.Count > 0;
+        if (_trayIcon is not null)
+        {
+            _trayIcon.Text = $"ClipNest · {_mainWindow.HotKeyDisplayText} 显示或隐藏";
+        }
+    }
+
+    private void MainWindow_HotKeyChanged(object? sender, EventArgs eventArgs)
+    {
+        Dispatcher.BeginInvoke(new Action(UpdateTrayMenuState));
+    }
+
+    private void OpenSettingsFromTray()
+    {
+        Dispatcher.BeginInvoke(new Action(() => _mainWindow?.ShowSettings()));
     }
 
     private void ToggleWindowFromTray()
@@ -362,14 +507,8 @@ public partial class App : System.Windows.Application, IDisposable
             return;
         }
 
-        var result = WpfMessageBox.Show(
-            "清空全部粘贴板记录？此操作无法撤销。",
-            "ClipNest",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Warning,
-            MessageBoxResult.No);
-
-        if (result == MessageBoxResult.Yes)
+        var owner = _mainWindow is { IsVisible: true } ? _mainWindow : null;
+        if (ConfirmWindow.ConfirmClearHistory(owner))
         {
             _viewModel.ClearHistory();
         }

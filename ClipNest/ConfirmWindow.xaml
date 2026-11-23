@@ -1,0 +1,112 @@
+<Window
+    x:Class="ClipNest.ConfirmWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="确认操作"
+    Width="390"
+    Height="210"
+    AllowsTransparency="True"
+    Background="Transparent"
+    FontFamily="Microsoft YaHei UI"
+    PreviewKeyDown="Window_PreviewKeyDown"
+    ResizeMode="NoResize"
+    ShowInTaskbar="False"
+    Topmost="True"
+    WindowStartupLocation="CenterOwner"
+    WindowStyle="None">
+
+    <Border
+        Margin="10"
+        Background="{StaticResource PanelBrush}"
+        BorderBrush="{StaticResource LineBrush}"
+        BorderThickness="1"
+        CornerRadius="12"
+        Effect="{StaticResource WindowShadow}">
+        <Grid Margin="20,18,20,17">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Border
+                    Width="38"
+                    Height="38"
+                    VerticalAlignment="Top"
+                    Background="{StaticResource AccentSoftBrush}"
+                    CornerRadius="10">
+                    <Path
+                        Width="17"
+                        Height="17"
+                        Data="M7,3 L7,10 M7,13 L7.1,13 M3,1 L13,1 L13,15 L3,15 Z"
+                        Fill="Transparent"
+                        Stretch="Uniform"
+                        Stroke="{StaticResource AccentBrush}"
+                        StrokeEndLineCap="Round"
+                        StrokeLineJoin="Round"
+                        StrokeStartLineCap="Round"
+                        StrokeThickness="1.7" />
+                </Border>
+                <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                    <TextBlock
+                        x:Name="TitleText"
+                        FontSize="15.5"
+                        FontWeight="SemiBold"
+                        Foreground="{StaticResource InkBrush}"
+                        Text="清空历史" />
+                    <TextBlock
+                        x:Name="MessageText"
+                        Margin="0,7,0,0"
+                        FontSize="12.5"
+                        Foreground="{StaticResource InkBrush}"
+                        Text="确定清空全部粘贴板记录吗？"
+                        TextWrapping="Wrap" />
+                </StackPanel>
+            </Grid>
+
+            <Border
+                Grid.Row="1"
+                Margin="0,13,0,12"
+                Padding="11,8"
+                Background="#FFF7F8F6"
+                BorderBrush="{StaticResource LineBrush}"
+                BorderThickness="1"
+                CornerRadius="7">
+                <TextBlock
+                    x:Name="DetailText"
+                    FontSize="11.5"
+                    Foreground="{StaticResource MutedBrush}"
+                    Text="此操作无法撤销。"
+                    TextWrapping="Wrap" />
+            </Border>
+
+            <StackPanel
+                Grid.Row="2"
+                HorizontalAlignment="Right"
+                Orientation="Horizontal">
+                <Button
+                    MinWidth="72"
+                    Padding="13,6"
+                    Click="CancelButton_Click"
+                    Content="取消"
+                    IsCancel="True"
+                    Style="{StaticResource QuietTextButtonStyle}" />
+                <Button
+                    x:Name="ConfirmButton"
+                    MinWidth="88"
+                    Margin="7,0,0,0"
+                    Padding="13,6"
+                    Background="{StaticResource AccentBrush}"
+                    Click="ConfirmButton_Click"
+                    Content="清空历史"
+                    IsDefault="True"
+                    Style="{StaticResource TextButtonStyle}" />
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

@@ -115,6 +115,36 @@ public sealed class ClipboardServiceTests
     }
 
     [Fact]
+    public void NormalizeImage_PreservesAlphaRepairWhenDownscaling()
+    {
+        const int width = 2600;
+        const int height = 100;
+        var pixels = new byte[width * height * 4];
+        for (var index = 0; index < pixels.Length; index += 4)
+        {
+            pixels[index] = 20;
+            pixels[index + 1] = 120;
+            pixels[index + 2] = 110;
+        }
+
+        var source = DecodePng(EncodePng(width, height, pixels));
+        var normalized = ClipboardService.NormalizeImage(source);
+        var repaired = DecodePng(normalized.Bytes);
+        var converted = new FormatConvertedBitmap(
+            repaired,
+            PixelFormats.Bgra32,
+            destinationPalette: null,
+            alphaThreshold: 0);
+        var outputPixels = new byte[converted.PixelWidth * converted.PixelHeight * 4];
+        converted.CopyPixels(outputPixels, converted.PixelWidth * 4, 0);
+
+        Assert.Equal(2560, normalized.Width);
+        Assert.InRange(normalized.Height, 96, 100);
+        Assert.Equal(255, outputPixels[3]);
+        Assert.Equal(255, outputPixels[outputPixels.Length - 1]);
+    }
+
+    [Fact]
     public void IsUsableClipboardImage_RejectsPlaceholderDimensions()
     {
         var content = ClipNest.Models.ClipContent.FromImage(

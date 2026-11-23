@@ -12,6 +12,8 @@ internal sealed class FakeClipboardService : IClipboardService
 
     public bool CopyResult { get; set; } = true;
 
+    public Func<ClipItem, bool, Task<bool>>? CopyHandler { get; set; }
+
     public void Attach(Window window)
     {
     }
@@ -20,10 +22,11 @@ internal sealed class FakeClipboardService : IClipboardService
     {
     }
 
-    public bool Copy(ClipItem item, bool includeFormatting)
+    public Task<bool> CopyAsync(ClipItem item, bool includeFormatting)
     {
         Copies.Add((item, includeFormatting));
-        return CopyResult;
+        return CopyHandler?.Invoke(item, includeFormatting)
+            ?? Task.FromResult(CopyResult);
     }
 
     public void Emit(ClipContent content)

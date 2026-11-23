@@ -1,0 +1,174 @@
+<Window
+    x:Class="ClipNest.SettingsWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="设置"
+    Width="430"
+    Height="330"
+    AllowsTransparency="True"
+    Background="Transparent"
+    FontFamily="Microsoft YaHei UI"
+    PreviewKeyDown="Window_PreviewKeyDown"
+    ResizeMode="NoResize"
+    ShowInTaskbar="False"
+    Topmost="True"
+    WindowStartupLocation="CenterOwner"
+    WindowStyle="None">
+
+    <Border
+        Margin="10"
+        Background="{StaticResource PanelBrush}"
+        BorderBrush="{StaticResource LineBrush}"
+        BorderThickness="1"
+        CornerRadius="12"
+        Effect="{StaticResource WindowShadow}">
+        <Grid Margin="20,16,20,17">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock
+                        FontSize="16"
+                        FontWeight="SemiBold"
+                        Foreground="{StaticResource InkBrush}"
+                        Text="设置" />
+                    <TextBlock
+                        Margin="0,3,0,0"
+                        FontSize="11"
+                        Foreground="{StaticResource MutedBrush}"
+                        Text="调整卡片显示与全局快捷键" />
+                </StackPanel>
+                <Button
+                    Grid.Column="1"
+                    Width="26"
+                    Height="26"
+                    AutomationProperties.Name="关闭设置"
+                    Click="CancelButton_Click"
+                    Style="{StaticResource IconButtonStyle}"
+                    ToolTip="关闭">
+                    <Path
+                        Width="9"
+                        Height="9"
+                        Data="M2,2 L10,10 M10,2 L2,10"
+                        Style="{StaticResource IconPathStyle}" />
+                </Button>
+            </Grid>
+
+            <Grid Grid.Row="1" Margin="0,18,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="80" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock
+                        FontSize="12.5"
+                        FontWeight="SemiBold"
+                        Foreground="{StaticResource InkBrush}"
+                        Text="卡片字符数" />
+                    <TextBlock
+                        Margin="0,3,0,0"
+                        FontSize="10.5"
+                        Foreground="{StaticResource MutedBrush}"
+                        Text="超出后以省略号结尾，可设置 20–200" />
+                </StackPanel>
+                <TextBox
+                    x:Name="TextLimitTextBox"
+                    Grid.Column="1"
+                    Padding="5,4"
+                    PreviewTextInput="NumericTextBox_PreviewTextInput"
+                    Style="{StaticResource SettingsValueTextBoxStyle}"
+                    TextAlignment="Center" />
+            </Grid>
+
+            <Grid Grid.Row="2" Margin="0,16,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="80" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock
+                        FontSize="12.5"
+                        FontWeight="SemiBold"
+                        Foreground="{StaticResource InkBrush}"
+                        Text="卡片字号" />
+                    <TextBlock
+                        Margin="0,3,0,0"
+                        FontSize="10.5"
+                        Foreground="{StaticResource MutedBrush}"
+                        Text="文本字号，可设置 11–20 px" />
+                </StackPanel>
+                <TextBox
+                    x:Name="FontSizeTextBox"
+                    Grid.Column="1"
+                    Padding="5,4"
+                    PreviewTextInput="NumericTextBox_PreviewTextInput"
+                    Style="{StaticResource SettingsValueTextBoxStyle}"
+                    TextAlignment="Center" />
+            </Grid>
+
+            <Grid Grid.Row="3" Margin="0,16,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock
+                        FontSize="12.5"
+                        FontWeight="SemiBold"
+                        Foreground="{StaticResource InkBrush}"
+                        Text="全局快捷键" />
+                    <TextBlock
+                        Margin="0,3,0,0"
+                        FontSize="10.5"
+                        Foreground="{StaticResource MutedBrush}"
+                        Text="点击录制后按下新的组合键" />
+                </StackPanel>
+                <Button
+                    x:Name="HotKeyButton"
+                    Grid.Column="1"
+                    MinWidth="130"
+                    Padding="12,7"
+                    Click="HotKeyButton_Click"
+                    Content="F4"
+                    Style="{StaticResource QuietTextButtonStyle}" />
+            </Grid>
+
+            <Border
+                Grid.Row="5"
+                Margin="0,16,0,0"
+                Padding="0,14,0,0"
+                BorderBrush="{StaticResource LineBrush}"
+                BorderThickness="0,1,0,0">
+                <StackPanel
+                    HorizontalAlignment="Right"
+                    Orientation="Horizontal">
+                    <Button
+                        MinWidth="72"
+                        Padding="13,6"
+                        Click="CancelButton_Click"
+                        Content="取消"
+                        Style="{StaticResource QuietTextButtonStyle}" />
+                    <Button
+                        MinWidth="80"
+                        Margin="7,0,0,0"
+                        Padding="13,6"
+                        Click="SaveButton_Click"
+                        Content="保存"
+                        IsDefault="True"
+                        Style="{StaticResource TextButtonStyle}" />
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

@@ -1,3 +1,4 @@
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
@@ -6,6 +7,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using ClipNest.Infrastructure;
 using ClipNest.Models;
@@ -28,10 +30,19 @@ public partial class MainWindow : Window, IDisposable
     private readonly DispatcherTimer _historySaveTimer;
     private readonly DispatcherTimer _placementSaveTimer;
     private readonly DispatcherTimer _toastTimer;
+    private readonly HotKeyDefinition _hotKey;
 
     private bool _disposed;
     private bool _isResizing;
     private bool _historySaveWarningShown;
+    private bool _hotKeyAvailable = true;
+    private ClipItem? _pressedClipItem;
+    private ClipItem? _pendingCardCopyItem;
+    private bool _copyDispatchQueued;
+    private ClipItem? _selectedItem;
+    private bool _suppressCardClick;
+    private bool _selectionRefreshQueued;
+    private HwndSource? _windowSource;
 
     public MainWindow(
         MainViewModel viewModel,
@@ -45,15 +56,21 @@ public partial class MainWindow : Window, IDisposable
         _historyStore = historyStore ?? throw new ArgumentNullException(nameof(historyStore));
         _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        _hotKey = HotKeyDefinition.FromSettings(_settings);
         _hotKeyService = new HotKeyService();
 
         InitializeComponent();
         DataContext = _viewModel;
+        _viewModel.ApplyDisplaySettings(
+            _settings.CardTextLimit,
+            _settings.CardFontSize);
         ApplySettings();
 
         _viewModel.HistoryChanged += ViewModel_HistoryChanged;
         _viewModel.NotificationRequested += ViewModel_NotificationRequested;
+        _viewModel.ItemCopied += ViewModel_ItemCopied;
         _viewModel.PropertyChanged += ViewModel_PropertyChanged;
+        _viewModel.VisibleItems.CollectionChanged += VisibleItems_CollectionChanged;
         _hotKeyService.Pressed += HotKeyService_Pressed;
 
         _historySaveTimer = new DispatcherTimer(DispatcherPriority.Background)
@@ -83,6 +100,10 @@ public partial class MainWindow : Window, IDisposable
 
     public string? RegistrationWarning { get; private set; }
 
+    public string HotKeyDisplayText => _hotKeyService.CurrentHotKey.DisplayText;
+
+    public event EventHandler? HotKeyChanged;
+
     public void HideToTray()
     {
         if (!IsVisible)
@@ -95,23 +116,34 @@ public partial class MainWindow : Window, IDisposable
         _ = SavePlacementAsync();
     }
 
-    public void ShowFromTray()
+    public void ShowFromTray(bool activate = true)
     {
         if (IsVisible)
         {
-            Activate();
+            if (activate)
+            {
+                Activate();
+            }
+
             return;
         }
 
+        var previousShowActivated = ShowActivated;
+        ShowActivated = activate;
         Show();
+        ShowActivated = previousShowActivated;
         WindowState = WindowState.Normal;
         Topmost = true;
-        Activate();
-        Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() =>
+        if (activate)
         {
-            Topmost = true;
-            Focus();
-        }));
+            Activate();
+            EnsureKeyboardSelection();
+            Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() =>
+            {
+                Topmost = true;
+                Focus();
+            }));
+        }
     }
 
     public void ToggleVisibility()
@@ -185,6 +217,8 @@ public partial class MainWindow : Window, IDisposable
     private void MainWindow_SourceInitialized(object? sender, EventArgs eventArgs)
     {
         var handle = new WindowInteropHelper(this).Handle;
+        _windowSource = HwndSource.FromHwnd(handle);
+        _windowSource?.AddHook(WindowMessageHook);
         var extendedStyle = NativeMethods.GetWindowLongPtr(handle, NativeMethods.GwlExStyle).ToInt64();
         extendedStyle |= NativeMethods.WsExToolWindow;
         extendedStyle &= ~NativeMethods.WsExAppWindow;
@@ -204,12 +238,55 @@ public partial class MainWindow : Window, IDisposable
             RegistrationWarning = "无法监听系统剪贴板。";
         }
 
-        if (!_hotKeyService.Attach(this))
+        _hotKeyAvailable = _hotKeyService.Attach(this, _hotKey);
+        if (!_hotKeyAvailable)
         {
+            var conflict = $"{_hotKey.DisplayText} 快捷键已被其他程序占用。";
             RegistrationWarning = string.IsNullOrWhiteSpace(RegistrationWarning)
-                ? "F4 快捷键已被其他程序占用。"
-                : $"{RegistrationWarning} F4 快捷键已被其他程序占用。";
+                ? conflict
+                : $"{RegistrationWarning} {conflict}";
         }
+
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
+        {
+            ClampWindowToCurrentMonitor();
+            UpdateHotKeyUi();
+            EnsureKeyboardSelection();
+        }));
+    }
+
+    private IntPtr WindowMessageHook(
+        IntPtr hwnd,
+        int message,
+        IntPtr wParam,
+        IntPtr lParam,
+        ref bool handled)
+    {
+        if (message != NativeMethods.WmMouseActivate
+            || !IsLoaded
+            || _viewModel.IsEditing
+            || _viewModel.IsEditingImage
+            || _viewModel.IsSearchOpen
+            || Mouse.RightButton == MouseButtonState.Pressed)
+        {
+            return IntPtr.Zero;
+        }
+
+        var value = lParam.ToInt64();
+        var screenPoint = new Point(
+            unchecked((short)(value & 0xFFFF)),
+            unchecked((short)((value >> 16) & 0xFFFF)));
+        var historyPoint = HistoryScrollViewer.PointFromScreen(screenPoint);
+        if (historyPoint.X >= 0
+            && historyPoint.Y >= 0
+            && historyPoint.X <= HistoryScrollViewer.ActualWidth
+            && historyPoint.Y <= HistoryScrollViewer.ActualHeight)
+        {
+            handled = true;
+            return new IntPtr(NativeMethods.MaNoActivate);
+        }
+
+        return IntPtr.Zero;
     }
 
     private void ViewModel_HistoryChanged(object? sender, EventArgs eventArgs)
@@ -223,6 +300,14 @@ public partial class MainWindow : Window, IDisposable
         Dispatcher.BeginInvoke(new Action(() => ShowToast(message, canUndo)));
     }
 
+    private void ViewModel_ItemCopied(object? sender, EventArgs eventArgs)
+    {
+        if (_settings.HideAfterCopy)
+        {
+            Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(HideToTray));
+        }
+    }
+
     private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs eventArgs)
     {
         if (eventArgs.PropertyName == nameof(MainViewModel.IsEditing) && _viewModel.IsEditing)
@@ -233,6 +318,39 @@ public partial class MainWindow : Window, IDisposable
                 EditTextBox.SelectAll();
             }));
         }
+
+        if (eventArgs.PropertyName == nameof(MainViewModel.IsSearchOpen)
+            && _viewModel.IsSearchOpen)
+        {
+            Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() =>
+            {
+                SearchTextBox.Focus();
+                SearchTextBox.SelectAll();
+            }));
+        }
+
+        if (eventArgs.PropertyName == nameof(MainViewModel.IsEditingImage)
+            && _viewModel.IsEditingImage)
+        {
+            Activate();
+        }
+    }
+
+    private void VisibleItems_CollectionChanged(
+        object? sender,
+        NotifyCollectionChangedEventArgs eventArgs)
+    {
+        if (_selectionRefreshQueued)
+        {
+            return;
+        }
+
+        _selectionRefreshQueued = true;
+        Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+        {
+            _selectionRefreshQueued = false;
+            EnsureKeyboardSelection();
+        }));
     }
 
     private async void HistorySaveTimer_Tick(object? sender, EventArgs eventArgs)
@@ -316,7 +434,14 @@ public partial class MainWindow : Window, IDisposable
 
     private void HotKeyService_Pressed(object? sender, EventArgs eventArgs)
     {
-        ToggleVisibility();
+        if (IsVisible)
+        {
+            HideToTray();
+        }
+        else
+        {
+            ShowFromTray(activate: false);
+        }
     }
 
     private void Root_MouseLeftButtonDown(object sender, MouseButtonEventArgs eventArgs)
@@ -362,8 +487,6 @@ public partial class MainWindow : Window, IDisposable
             return;
         }
 
-        var centerX = Left + (ActualWidth / 2);
-        var centerY = Top + (ActualHeight / 2);
         var direction = eventArgs.Delta > 0 ? 1 : -1;
         var currentStep = Math.Round(Width / ResizeStep);
         var nextWidth = Math.Min(
@@ -372,20 +495,11 @@ public partial class MainWindow : Window, IDisposable
                 AppSettings.MinimumWidth),
             AppSettings.MaximumWidth);
         var nextHeight = nextWidth / AppSettings.AspectRatio;
-        var virtualRight = SystemParameters.VirtualScreenLeft + SystemParameters.VirtualScreenWidth;
-        var virtualBottom = SystemParameters.VirtualScreenTop + SystemParameters.VirtualScreenHeight;
-        var maximumLeft = Math.Max(SystemParameters.VirtualScreenLeft, virtualRight - nextWidth);
-        var maximumTop = Math.Max(SystemParameters.VirtualScreenTop, virtualBottom - nextHeight);
 
+        // Keep the window origin fixed; only the right and bottom edges move.
         _isResizing = true;
         Width = nextWidth;
         Height = nextHeight;
-        Left = Math.Min(
-            Math.Max(centerX - (nextWidth / 2), SystemParameters.VirtualScreenLeft),
-            maximumLeft);
-        Top = Math.Min(
-            Math.Max(centerY - (nextHeight / 2), SystemParameters.VirtualScreenTop),
-            maximumTop);
         _isResizing = false;
 
         _placementSaveTimer.Stop();
@@ -393,18 +507,166 @@ public partial class MainWindow : Window, IDisposable
         eventArgs.Handled = true;
     }
 
+    private void ResizeGrip_DragDelta(object sender, DragDeltaEventArgs eventArgs)
+    {
+        var horizontal = eventArgs.HorizontalChange;
+        var vertical = eventArgs.VerticalChange * AppSettings.AspectRatio;
+        var delta = Math.Abs(horizontal) >= Math.Abs(vertical)
+            ? horizontal
+            : vertical;
+        if (Math.Abs(delta) < 0.1)
+        {
+            return;
+        }
+
+        var workArea = GetCurrentMonitorWorkArea();
+        var maximumWidth = Math.Max(
+            AppSettings.MinimumWidth,
+            Math.Min(
+                AppSettings.MaximumWidth,
+                Math.Min(
+                    workArea.Width - 12,
+                    (workArea.Height - 12) * AppSettings.AspectRatio)));
+        var nextWidth = Math.Min(
+            Math.Max(Width + delta, AppSettings.MinimumWidth),
+            maximumWidth);
+        var nextHeight = nextWidth / AppSettings.AspectRatio;
+
+        _isResizing = true;
+        Width = nextWidth;
+        Height = nextHeight;
+        Left = Math.Min(Math.Max(Left, workArea.Left), Math.Max(workArea.Left, workArea.Right - Width));
+        Top = Math.Min(Math.Max(Top, workArea.Top), Math.Max(workArea.Top, workArea.Bottom - Height));
+        _isResizing = false;
+
+        _placementSaveTimer.Stop();
+        _placementSaveTimer.Start();
+        eventArgs.Handled = true;
+    }
+
+    private void ClampWindowToCurrentMonitor()
+    {
+        if (!IsLoaded)
+        {
+            return;
+        }
+
+        var workArea = GetCurrentMonitorWorkArea();
+        Left = Math.Min(
+            Math.Max(Left, workArea.Left),
+            Math.Max(workArea.Left, workArea.Right - Width));
+        Top = Math.Min(
+            Math.Max(Top, workArea.Top),
+            Math.Max(workArea.Top, workArea.Bottom - Height));
+    }
+
+    private Rect GetCurrentMonitorWorkArea()
+    {
+        var handle = new WindowInteropHelper(this).Handle;
+        if (handle != IntPtr.Zero)
+        {
+            var monitor = NativeMethods.MonitorFromWindow(
+                handle,
+                NativeMethods.MonitorDefaultToNearest);
+            var info = new NativeMethods.MonitorInfo
+            {
+                Size = System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.MonitorInfo>()
+            };
+            if (monitor != IntPtr.Zero
+                && NativeMethods.GetMonitorInfo(monitor, ref info))
+            {
+                var dpi = VisualTreeHelper.GetDpi(this);
+                return new Rect(
+                    info.Work.Left / dpi.DpiScaleX,
+                    info.Work.Top / dpi.DpiScaleY,
+                    info.Work.Width / dpi.DpiScaleX,
+                    info.Work.Height / dpi.DpiScaleY);
+            }
+        }
+
+        return SystemParameters.WorkArea;
+    }
+
     private void HideButton_Click(object sender, RoutedEventArgs eventArgs)
     {
         HideToTray();
     }
 
-    private void ClipItem_MouseLeftButtonUp(object sender, MouseButtonEventArgs eventArgs)
+    private void ClipItem_MouseLeftButtonDown(object sender, MouseButtonEventArgs eventArgs)
     {
-        if (sender is FrameworkElement { DataContext: ClipItem item })
+        if (sender is not FrameworkElement { DataContext: ClipItem item }
+            || IsButtonSource(eventArgs.OriginalSource as DependencyObject))
         {
-            _viewModel.CopyFormattedCommand.Execute(item);
+            return;
+        }
+
+        SelectItem(item);
+        _pressedClipItem = item;
+        _suppressCardClick = false;
+
+        if (eventArgs.ClickCount == 2 && item.IsImage)
+        {
+            ShowImagePreview(item);
+            _suppressCardClick = true;
             eventArgs.Handled = true;
         }
+    }
+
+    private void ClipItem_MouseLeftButtonUp(object sender, MouseButtonEventArgs eventArgs)
+    {
+        var pressedItem = _pressedClipItem;
+        _pressedClipItem = null;
+        if (_suppressCardClick)
+        {
+            _suppressCardClick = false;
+            eventArgs.Handled = true;
+            return;
+        }
+
+        if (sender is FrameworkElement { DataContext: ClipItem item }
+            && ReferenceEquals(item, pressedItem)
+            && !IsButtonSource(eventArgs.OriginalSource as DependencyObject))
+        {
+            SelectItem(item);
+            ScheduleCardCopy(item);
+            eventArgs.Handled = true;
+        }
+    }
+
+    private void ScheduleCardCopy(ClipItem item)
+    {
+        _pendingCardCopyItem = item;
+        if (_copyDispatchQueued)
+        {
+            return;
+        }
+
+        _copyDispatchQueued = true;
+        Dispatcher.BeginInvoke(
+            DispatcherPriority.Background,
+            new Action(CopyPendingCard));
+    }
+
+    private void CopyPendingCard()
+    {
+        _copyDispatchQueued = false;
+        if (_disposed)
+        {
+            _pendingCardCopyItem = null;
+            return;
+        }
+
+        var item = _pendingCardCopyItem;
+        _pendingCardCopyItem = null;
+        if (item is not null && _viewModel.VisibleItems.Contains(item))
+        {
+            _viewModel.CopyFormattedCommand.Execute(item);
+        }
+    }
+
+    private void CancelPendingCardCopy()
+    {
+        _pendingCardCopyItem = null;
     }
 
     private void ClipItem_MouseRightButtonUp(object sender, MouseButtonEventArgs eventArgs)
@@ -414,6 +676,8 @@ public partial class MainWindow : Window, IDisposable
             return;
         }
 
+        CancelPendingCardCopy();
+        SelectItem(item);
         var menu = new ContextMenu
         {
             PlacementTarget = target,
@@ -460,6 +724,298 @@ public partial class MainWindow : Window, IDisposable
         return menuItem;
     }
 
+    private void CloseSearchButton_Click(object sender, RoutedEventArgs eventArgs)
+    {
+        _viewModel.CloseSearchCommand.Execute(null);
+        HistoryScrollViewer.Focus();
+    }
+
+    private void SearchFilter_Click(object sender, RoutedEventArgs eventArgs)
+    {
+        if (sender is FrameworkElement { Tag: string filter })
+        {
+            _viewModel.SetFilterCommand.Execute(filter);
+            eventArgs.Handled = true;
+        }
+    }
+
+    private void MoreButton_Click(object sender, RoutedEventArgs eventArgs)
+    {
+        if (sender is FrameworkElement { ContextMenu: not null } element)
+        {
+            element.ContextMenu.PlacementTarget = element;
+            element.ContextMenu.Placement = PlacementMode.Bottom;
+            element.ContextMenu.IsOpen = true;
+            eventArgs.Handled = true;
+        }
+    }
+
+    public void ShowSettings()
+    {
+        var dialog = new SettingsWindow(
+            _settings.CardTextLimit,
+            _settings.CardFontSize,
+            _hotKeyService.CurrentHotKey);
+        if (IsVisible)
+        {
+            dialog.Owner = this;
+        }
+        else
+        {
+            dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        }
+
+        if (dialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        var requestedHotKey = dialog.HotKey;
+        var hotKeyUpdated =
+            (requestedHotKey.Equals(_hotKeyService.CurrentHotKey) && _hotKeyAvailable)
+            || _hotKeyService.UpdateHotKey(requestedHotKey);
+        if (!hotKeyUpdated)
+        {
+            _hotKeyAvailable = false;
+        }
+        else
+        {
+            _hotKeyAvailable = true;
+            _settings.HotKeyModifiers = requestedHotKey.Modifiers;
+            _settings.HotKeyKey = requestedHotKey.VirtualKey;
+        }
+
+        _settings.CardTextLimit = dialog.CardTextLimit;
+        _settings.CardFontSize = dialog.CardFontSize;
+        _viewModel.ApplyDisplaySettings(
+            _settings.CardTextLimit,
+            _settings.CardFontSize);
+        _ = SaveSettingsAsync();
+        UpdateHotKeyUi();
+        if (hotKeyUpdated)
+        {
+            HotKeyChanged?.Invoke(this, EventArgs.Empty);
+        }
+        else
+        {
+            ShowToast(
+                $"{requestedHotKey.DisplayText} 已被占用，其他设置已保存",
+                false);
+        }
+    }
+
+    private void SettingsMenuItem_Click(object sender, RoutedEventArgs eventArgs)
+    {
+        ShowSettings();
+    }
+
+    private async void AutoHideMenuItem_Click(object sender, RoutedEventArgs eventArgs)
+    {
+        _settings.HideAfterCopy = !_settings.HideAfterCopy;
+        AutoHideMenuItem.IsChecked = _settings.HideAfterCopy;
+        await SaveSettingsAsync();
+        ShowToast(
+            _settings.HideAfterCopy ? "复制后自动隐藏已开启" : "复制后自动隐藏已关闭",
+            false);
+    }
+
+    private void ClearHistoryMenuItem_Click(object sender, RoutedEventArgs eventArgs)
+    {
+        if (ConfirmWindow.ConfirmClearHistory(this))
+        {
+            _viewModel.ClearHistory();
+        }
+    }
+
+    private void UpdateHotKeyUi()
+    {
+        HotKeyStatusMenuItem.Header = _hotKeyAvailable ? "快捷键已启用" : "快捷键冲突，请重新设置";
+        HotKeyStatusMenuItem.IsEnabled = false;
+        HotKeyConflictDot.Visibility = _hotKeyAvailable
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+        HideButton.ToolTip = $"隐藏 ({_hotKeyService.CurrentHotKey.DisplayText})";
+        MoreButton.ToolTip = _hotKeyAvailable
+            ? "更多操作"
+            : "更多操作 · 快捷键冲突";
+        AutoHideMenuItem.IsChecked = _settings.HideAfterCopy;
+    }
+
+    private async Task SaveSettingsAsync()
+    {
+        try
+        {
+            await _settingsStore.SaveAsync(_settings);
+        }
+        catch (Exception exception) when (
+            exception is IOException
+            or UnauthorizedAccessException)
+        {
+            ShowToast("设置保存失败", false);
+        }
+    }
+
+    private void Window_PreviewTextInput(object sender, TextCompositionEventArgs eventArgs)
+    {
+        if (_viewModel.IsEditing
+            || _viewModel.IsEditingImage
+            || _viewModel.IsSearchOpen
+            || Keyboard.FocusedElement is TextBoxBase
+            || string.IsNullOrEmpty(eventArgs.Text))
+        {
+            return;
+        }
+
+        if ((Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Alt)) != 0)
+        {
+            return;
+        }
+
+        var text = eventArgs.Text;
+        _viewModel.OpenSearchCommand.Execute(null);
+        Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() =>
+        {
+            SearchTextBox.Focus();
+            _viewModel.SearchText = text;
+            SearchTextBox.CaretIndex = SearchTextBox.Text.Length;
+        }));
+        eventArgs.Handled = true;
+    }
+
+    private void SelectItem(ClipItem item)
+    {
+        if (!_viewModel.VisibleItems.Contains(item))
+        {
+            return;
+        }
+
+        if (_selectedItem is not null && !ReferenceEquals(_selectedItem, item))
+        {
+            _selectedItem.IsKeyboardSelected = false;
+        }
+
+        _selectedItem = item;
+        item.IsKeyboardSelected = true;
+    }
+
+    private void EnsureKeyboardSelection()
+    {
+        if (_selectedItem is not null
+            && _viewModel.VisibleItems.Contains(_selectedItem))
+        {
+            return;
+        }
+
+        if (_selectedItem is not null)
+        {
+            _selectedItem.IsKeyboardSelected = false;
+            _selectedItem = null;
+        }
+
+        if (_viewModel.VisibleItems.Count > 0)
+        {
+            SelectItem(_viewModel.VisibleItems[0]);
+        }
+    }
+
+    private void MoveKeyboardSelection(int offset)
+    {
+        if (_viewModel.VisibleItems.Count == 0)
+        {
+            return;
+        }
+
+        EnsureKeyboardSelection();
+        var index = _selectedItem is null
+            ? 0
+            : _viewModel.VisibleItems.IndexOf(_selectedItem);
+        var nextIndex = Math.Min(
+            Math.Max(index + offset, 0),
+            _viewModel.VisibleItems.Count - 1);
+        SelectItem(_viewModel.VisibleItems[nextIndex]);
+        BringSelectedItemIntoView();
+    }
+
+    private void BringSelectedItemIntoView()
+    {
+        if (_selectedItem is null)
+        {
+            return;
+        }
+
+        var container = HistoryItemsControl.ItemContainerGenerator
+            .ContainerFromItem(_selectedItem) as FrameworkElement;
+        container?.BringIntoView();
+    }
+
+    private void ShowImagePreview(ClipItem item)
+    {
+        CancelPendingCardCopy();
+        var bytes = item.GetImageBytes();
+        if (bytes is null)
+        {
+            return;
+        }
+
+        try
+        {
+            ImagePreviewLarge.Source = DecodeImage(bytes);
+            ImagePreviewDimensions.Text = item.ImageDimensionsLabel;
+            ImagePreviewOverlay.Visibility = Visibility.Visible;
+            Activate();
+        }
+        catch (FormatException)
+        {
+            ShowToast("图片数据损坏，无法预览", false);
+        }
+        catch (NotSupportedException)
+        {
+            ShowToast("图片格式不受支持", false);
+        }
+    }
+
+    private void CloseImagePreview()
+    {
+        ImagePreviewOverlay.Visibility = Visibility.Collapsed;
+        ImagePreviewLarge.Source = null;
+    }
+
+    private void ImagePreviewOverlay_MouseLeftButtonDown(
+        object sender,
+        MouseButtonEventArgs eventArgs)
+    {
+        if (IsButtonSource(eventArgs.OriginalSource as DependencyObject))
+        {
+            return;
+        }
+
+        CloseImagePreview();
+        eventArgs.Handled = true;
+    }
+
+    private void ImagePreviewCloseButton_Click(
+        object sender,
+        RoutedEventArgs eventArgs)
+    {
+        CloseImagePreview();
+        eventArgs.Handled = true;
+    }
+
+    private static bool IsButtonSource(DependencyObject? source)
+    {
+        while (source is not null)
+        {
+            if (source is ButtonBase)
+            {
+                return true;
+            }
+
+            source = VisualTreeHelper.GetParent(source);
+        }
+
+        return false;
+    }
+
     private void UndoToastButton_Click(object sender, RoutedEventArgs eventArgs)
     {
         _viewModel.UndoDeleteCommand.Execute(null);
@@ -470,7 +1026,15 @@ public partial class MainWindow : Window, IDisposable
     {
         if (eventArgs.Key == Key.Escape)
         {
-            if (_viewModel.IsEditingImage)
+            if (ImagePreviewOverlay.Visibility == Visibility.Visible)
+            {
+                CloseImagePreview();
+            }
+            else if (_viewModel.IsSearchOpen)
+            {
+                _viewModel.CloseSearchCommand.Execute(null);
+            }
+            else if (_viewModel.IsEditingImage)
             {
                 _viewModel.CancelImageEditCommand.Execute(null);
             }
@@ -483,6 +1047,16 @@ public partial class MainWindow : Window, IDisposable
                 HideToTray();
             }
 
+            eventArgs.Handled = true;
+            return;
+        }
+
+        if (eventArgs.Key == Key.F
+            && Keyboard.Modifiers.HasFlag(ModifierKeys.Control)
+            && !_viewModel.IsEditing
+            && !_viewModel.IsEditingImage)
+        {
+            _viewModel.OpenSearchCommand.Execute(null);
             eventArgs.Handled = true;
             return;
         }
@@ -501,6 +1075,91 @@ public partial class MainWindow : Window, IDisposable
             }
 
             eventArgs.Handled = true;
+            return;
+        }
+
+        if (_viewModel.IsEditing || _viewModel.IsEditingImage)
+        {
+            return;
+        }
+
+        var searchHasFocus = Keyboard.FocusedElement is TextBoxBase
+            && _viewModel.IsSearchOpen;
+        if (eventArgs.Key is Key.Up or Key.Down or Key.Left or Key.Right)
+        {
+            if (searchHasFocus && Keyboard.FocusedElement is TextBox)
+            {
+                return;
+            }
+
+            var offset = eventArgs.Key is Key.Up or Key.Left ? -1 : 1;
+            MoveKeyboardSelection(offset);
+            eventArgs.Handled = true;
+            return;
+        }
+
+        if (eventArgs.Key == Key.Enter)
+        {
+            EnsureKeyboardSelection();
+            if (_selectedItem is not null)
+            {
+                if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)
+                    && _selectedItem.IsText)
+                {
+                    _viewModel.CopyPlainCommand.Execute(_selectedItem);
+                }
+                else
+                {
+                    _viewModel.CopyFormattedCommand.Execute(_selectedItem);
+                }
+
+                eventArgs.Handled = true;
+            }
+
+            return;
+        }
+
+        if (searchHasFocus || Keyboard.FocusedElement is TextBoxBase)
+        {
+            return;
+        }
+
+        if (eventArgs.Key == Key.Delete && _selectedItem is not null)
+        {
+            _viewModel.DeleteCommand.Execute(_selectedItem);
+            eventArgs.Handled = true;
+            return;
+        }
+
+        if (eventArgs.Key == Key.P
+            && Keyboard.Modifiers.HasFlag(ModifierKeys.Control)
+            && _selectedItem is not null)
+        {
+            _viewModel.TogglePinCommand.Execute(_selectedItem);
+            eventArgs.Handled = true;
+            return;
+        }
+
+        if (eventArgs.Key == Key.Space
+            && Keyboard.Modifiers == ModifierKeys.None
+            && _selectedItem is { IsImage: true })
+        {
+            ShowImagePreview(_selectedItem);
+            eventArgs.Handled = true;
+            return;
+        }
+
+        if (Keyboard.Modifiers == ModifierKeys.None
+            && eventArgs.Key is >= Key.D1 and <= Key.D5)
+        {
+            var index = (int)eventArgs.Key - (int)Key.D1;
+            if (index < _viewModel.VisibleItems.Count)
+            {
+                var item = _viewModel.VisibleItems[index];
+                SelectItem(item);
+                _viewModel.CopyFormattedCommand.Execute(item);
+                eventArgs.Handled = true;
+            }
         }
     }
 
@@ -550,6 +1209,18 @@ public partial class MainWindow : Window, IDisposable
         return false;
     }
 
+    private static BitmapImage DecodeImage(byte[] bytes)
+    {
+        using var stream = new MemoryStream(bytes, writable: false);
+        var bitmap = new BitmapImage();
+        bitmap.BeginInit();
+        bitmap.CacheOption = BitmapCacheOption.OnLoad;
+        bitmap.StreamSource = stream;
+        bitmap.EndInit();
+        bitmap.Freeze();
+        return bitmap;
+    }
+
     private void MainWindow_Closing(object? sender, CancelEventArgs eventArgs)
     {
         if (Application.Current is App { IsShuttingDown: true })
@@ -577,9 +1248,15 @@ public partial class MainWindow : Window, IDisposable
         _historySaveTimer.Stop();
         _placementSaveTimer.Stop();
         _toastTimer.Stop();
+        CancelPendingCardCopy();
+        _selectionRefreshQueued = false;
+        _windowSource?.RemoveHook(WindowMessageHook);
+        _windowSource = null;
         _viewModel.HistoryChanged -= ViewModel_HistoryChanged;
         _viewModel.NotificationRequested -= ViewModel_NotificationRequested;
+        _viewModel.ItemCopied -= ViewModel_ItemCopied;
         _viewModel.PropertyChanged -= ViewModel_PropertyChanged;
+        _viewModel.VisibleItems.CollectionChanged -= VisibleItems_CollectionChanged;
         _hotKeyService.Pressed -= HotKeyService_Pressed;
         _hotKeyService.Dispose();
         _clipboardService.Detach();

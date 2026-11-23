@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using ClipNest;
 using ClipNest.Models;
 using ClipNest.Services;
@@ -16,6 +17,9 @@ internal static class Program
     {
         var editMode = args.Contains("--edit", StringComparer.OrdinalIgnoreCase);
         var imageEditMode = args.Contains("--edit-image", StringComparer.OrdinalIgnoreCase);
+        var searchMode = args.Contains("--search", StringComparer.OrdinalIgnoreCase);
+        var confirmMode = args.Contains("--confirm", StringComparer.OrdinalIgnoreCase);
+        var settingsMode = args.Contains("--settings", StringComparer.OrdinalIgnoreCase);
         var outputArgument = args.FirstOrDefault(argument => !argument.StartsWith("--", StringComparison.Ordinal));
         var outputPath = outputArgument is not null
             ? Path.GetFullPath(outputArgument)
@@ -39,6 +43,29 @@ internal static class Program
                 "pack://application:,,,/ClipNest;component/Themes/Theme.xaml",
                 UriKind.Absolute)
         });
+
+        if (confirmMode)
+        {
+            var confirmWindow = new ConfirmWindow(
+                "清空历史",
+                "确定清空全部粘贴板记录吗？",
+                "此操作会删除所有文字和图片记录，且无法撤销。",
+                "清空历史");
+            RenderWindowContent(confirmWindow, outputPath);
+            application.Shutdown();
+            return;
+        }
+
+        if (settingsMode)
+        {
+            var settingsWindow = new SettingsWindow(
+                40,
+                13.5,
+                HotKeyDefinition.Default);
+            RenderWindowContent(settingsWindow, outputPath);
+            application.Shutdown();
+            return;
+        }
 
         var tempDirectory = Path.Combine(Path.GetTempPath(), $"ClipNest.UiSnapshot.{Guid.NewGuid():N}");
         var historyStore = new HistoryStore(Path.Combine(tempDirectory, "history.json"));
@@ -74,6 +101,11 @@ internal static class Program
         {
             viewModel.EditCommand.Execute(viewModel.Items.First(item => item.IsImage));
         }
+        else if (searchMode)
+        {
+            viewModel.OpenSearchCommand.Execute(null);
+            viewModel.SearchText = "ClipNest";
+        }
 
         window.Width = 450;
         window.Height = 300;
@@ -81,6 +113,17 @@ internal static class Program
         var content = (FrameworkElement)window.Content;
         content.Measure(new Size(450, 300));
         content.Arrange(new Rect(0, 0, 450, 300));
+        content.UpdateLayout();
+
+        var previewFrame = new DispatcherFrame();
+        var previewTimer = new DispatcherTimer(
+            TimeSpan.FromMilliseconds(350),
+            DispatcherPriority.Background,
+            (_, _) => previewFrame.Continue = false,
+            Dispatcher.CurrentDispatcher);
+        previewTimer.Start();
+        Dispatcher.PushFrame(previewFrame);
+        previewTimer.Stop();
         content.UpdateLayout();
 
         var renderedWindow = new RenderTargetBitmap(900, 600, 192, 192, PixelFormats.Pbgra32);
@@ -108,6 +151,53 @@ internal static class Program
         window.Dispose();
         historyStore.Dispose();
         application.Shutdown();
+        Console.WriteLine($"Wrote {outputPath}");
+    }
+
+    private static void RenderWindowContent(
+        Window window,
+        string outputPath)
+    {
+        var pixelWidth = (int)Math.Round(window.Width * 2);
+        var pixelHeight = (int)Math.Round(window.Height * 2);
+        var content = (FrameworkElement)window.Content;
+        content.Measure(new Size(window.Width, window.Height));
+        content.Arrange(new Rect(0, 0, window.Width, window.Height));
+        content.UpdateLayout();
+
+        var rendered = new RenderTargetBitmap(
+            pixelWidth,
+            pixelHeight,
+            192,
+            192,
+            PixelFormats.Pbgra32);
+        rendered.Render(content);
+
+        var composition = new DrawingVisual();
+        using (var context = composition.RenderOpen())
+        {
+            context.DrawRectangle(
+                new SolidColorBrush(Color.FromRgb(222, 233, 228)),
+                null,
+                new Rect(0, 0, pixelWidth, pixelHeight));
+            context.DrawImage(
+                rendered,
+                new Rect(0, 0, pixelWidth, pixelHeight));
+        }
+
+        var final = new RenderTargetBitmap(
+            pixelWidth,
+            pixelHeight,
+            96,
+            96,
+            PixelFormats.Pbgra32);
+        final.Render(composition);
+
+        Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(final));
+        using var stream = File.Create(outputPath);
+        encoder.Save(stream);
         Console.WriteLine($"Wrote {outputPath}");
     }
 
@@ -167,9 +257,9 @@ internal static class Program
         {
         }
 
-        public bool Copy(ClipItem item, bool includeFormatting)
+        public Task<bool> CopyAsync(ClipItem item, bool includeFormatting)
         {
-            return true;
+            return Task.FromResult(true);
         }
 
         public void Emit(ClipContent content)

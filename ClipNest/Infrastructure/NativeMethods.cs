@@ -9,8 +9,11 @@ internal static class NativeMethods
     internal const int WsExAppWindow = 0x00040000;
     internal const int WmHotKey = 0x0312;
     internal const int WmClipboardUpdate = 0x031D;
+    internal const int WmMouseActivate = 0x0021;
+    internal const int MaNoActivate = 3;
     internal const uint ModNoRepeat = 0x4000;
     internal const uint VkF4 = 0x73;
+    internal const uint MonitorDefaultToNearest = 0x00000002;
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -27,6 +30,16 @@ internal static class NativeMethods
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool UnregisterHotKey(IntPtr hwnd, int id);
+
+    [DllImport("user32.dll")]
+    internal static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint flags);
+
+    [DllImport("user32.dll")]
+    internal static extern IntPtr MonitorFromPoint(PointStruct point, uint flags);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool GetMonitorInfo(IntPtr monitor, ref MonitorInfo info);
 
     [DllImport("user32.dll", SetLastError = true)]
     internal static extern uint GetClipboardSequenceNumber();
@@ -55,5 +68,34 @@ internal static class NativeMethods
         return IntPtr.Size == 8
             ? SetWindowLong64(hwnd, index, newLong)
             : new IntPtr(SetWindowLong32(hwnd, index, newLong.ToInt32()));
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct PointStruct
+    {
+        public int X;
+        public int Y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct RectStruct
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+
+        public int Width => Right - Left;
+
+        public int Height => Bottom - Top;
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    internal struct MonitorInfo
+    {
+        public int Size;
+        public RectStruct Monitor;
+        public RectStruct Work;
+        public uint Flags;
     }
 }

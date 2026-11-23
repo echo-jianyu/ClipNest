@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using ClipNest.Models;
@@ -8,6 +9,7 @@ public sealed class AdaptiveCardPanel : Panel
 {
     private const double Gap = 7;
     private readonly List<CardPlacement> _placements = [];
+    private readonly Dictionary<UIElement, ClipItem> _observedItems = [];
 
     internal static int GetColumnCount(double width)
     {
@@ -50,12 +52,18 @@ public sealed class AdaptiveCardPanel : Panel
             return Math.Min(250, Math.Max(96, (cardWidth / aspect) + 12));
         }
 
-        var charactersPerLine = Math.Max(8, (int)(cardWidth / 14));
+        var charactersPerLine = Math.Max(
+            8,
+            (int)(cardWidth / Math.Max(1, item.DisplayFontSize * 1.04)));
         var textLength = Math.Max(1, item.DisplayText.Length);
         var lineCount = Math.Min(
             6,
             Math.Max(1, (int)Math.Ceiling((double)textLength / charactersPerLine)));
-        return Math.Min(132, Math.Max(48, 25 + (lineCount * 19)));
+        return Math.Min(
+            140,
+            Math.Max(
+                48,
+                25 + (lineCount * Math.Max(15, item.DisplayLineHeight))));
     }
 
     protected override Size MeasureOverride(Size availableSize)
@@ -121,6 +129,25 @@ public sealed class AdaptiveCardPanel : Panel
         return new Size(width, height);
     }
 
+    protected override void OnVisualChildrenChanged(
+        DependencyObject visualAdded,
+        DependencyObject visualRemoved)
+    {
+        base.OnVisualChildrenChanged(visualAdded, visualRemoved);
+
+        if (visualRemoved is FrameworkElement removedElement)
+        {
+            StopObserving(removedElement);
+            removedElement.DataContextChanged -= Element_DataContextChanged;
+        }
+
+        if (visualAdded is FrameworkElement addedElement)
+        {
+            addedElement.DataContextChanged += Element_DataContextChanged;
+            Observe(addedElement);
+        }
+    }
+
     protected override Size ArrangeOverride(Size finalSize)
     {
         foreach (var placement in _placements)
@@ -147,6 +174,51 @@ public sealed class AdaptiveCardPanel : Panel
         }
 
         return shortest;
+    }
+
+    private void Element_DataContextChanged(
+        object sender,
+        DependencyPropertyChangedEventArgs eventArgs)
+    {
+        if (sender is FrameworkElement element)
+        {
+            StopObserving(element);
+            Observe(element);
+        }
+    }
+
+    private void Observe(FrameworkElement element)
+    {
+        if (element.DataContext is not ClipItem item)
+        {
+            return;
+        }
+
+        item.PropertyChanged += Item_PropertyChanged;
+        _observedItems[element] = item;
+    }
+
+    private void StopObserving(FrameworkElement element)
+    {
+        if (_observedItems.TryGetValue(element, out var item))
+        {
+            item.PropertyChanged -= Item_PropertyChanged;
+            _observedItems.Remove(element);
+        }
+    }
+
+    private void Item_PropertyChanged(object? sender, PropertyChangedEventArgs eventArgs)
+    {
+        if (eventArgs.PropertyName is nameof(ClipItem.PixelWidth)
+            or nameof(ClipItem.PixelHeight)
+            or nameof(ClipItem.DisplayText)
+            or nameof(ClipItem.DisplayFontSize)
+            or nameof(ClipItem.PlainText)
+            or nameof(ClipItem.Pinned)
+            or nameof(ClipItem.IsImage))
+        {
+            InvalidateMeasure();
+        }
     }
 
     private static string NormalizeText(string text)

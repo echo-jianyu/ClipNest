@@ -1,3 +1,4 @@
+using System.IO;
 using System.Text.RegularExpressions;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -7,15 +8,26 @@ namespace ClipNest.Models;
 
 public sealed class ClipItem : ObservableObject
 {
+    public const int DefaultDisplayTextLimit = 40;
+    public const double DefaultDisplayFontSize = 13.5;
+
     private static readonly Regex WhitespaceRegex = new(@"\s+", RegexOptions.Compiled);
+    private static readonly SemaphoreSlim ThumbnailDecodeGate = new(2, 2);
     private static long _lastSequence = DateTime.UtcNow.Ticks;
 
     private bool _pinned;
+    private bool _isKeyboardSelected;
+    private int _displayTextLimit = DefaultDisplayTextLimit;
+    private double _displayFontSize = DefaultDisplayFontSize;
     private string _plainText = string.Empty;
     private string? _rtf;
     private string? _html;
     private string? _imagePngBase64;
+    private string? _imageFilePath;
     private ImageSource? _imagePreview;
+    private bool _imagePreviewLoading;
+    private bool _imagePreviewLoadAttempted;
+    private int _imagePreviewVersion;
 
     public Guid Id { get; private set; } = Guid.NewGuid();
 
@@ -50,16 +62,22 @@ public sealed class ClipItem : ObservableObject
 
     public string? ImagePngBase64
     {
-        get => _imagePngBase64;
-        private set
+        get
         {
-            if (SetProperty(ref _imagePngBase64, value))
+            if (_imagePngBase64 is not null)
             {
-                _imagePreview = null;
-                OnPropertyChanged(nameof(ImagePreview));
+                return _imagePngBase64;
             }
+
+            var bytes = GetImageBytes();
+            return bytes is null ? null : Convert.ToBase64String(bytes);
         }
+        private set => SetImageStorage(value, null);
     }
+
+    internal string? InlineImagePngBase64 => _imagePngBase64;
+
+    internal string? ImageFilePath => _imageFilePath;
 
     public int PixelWidth { get; private set; }
 
@@ -81,6 +99,12 @@ public sealed class ClipItem : ObservableObject
         }
     }
 
+    public bool IsKeyboardSelected
+    {
+        get => _isKeyboardSelected;
+        set => SetProperty(ref _isKeyboardSelected, value);
+    }
+
     public bool IsText => Kind == ClipContentKind.Text;
 
     public bool IsImage => Kind == ClipContentKind.Image;
@@ -95,11 +119,37 @@ public sealed class ClipItem : ObservableObject
             }
 
             var normalized = WhitespaceRegex.Replace(PlainText, " ").Trim();
-            return normalized.Length <= 40
+            return normalized.Length <= DisplayTextLimit
                 ? normalized
-                : $"{normalized.Substring(0, 40)}…";
+                : $"{normalized.Substring(0, DisplayTextLimit)}…";
         }
     }
+
+    public int DisplayTextLimit
+    {
+        get => _displayTextLimit;
+        private set
+        {
+            if (SetProperty(ref _displayTextLimit, value))
+            {
+                OnPropertyChanged(nameof(DisplayText));
+            }
+        }
+    }
+
+    public double DisplayFontSize
+    {
+        get => _displayFontSize;
+        private set
+        {
+            if (SetProperty(ref _displayFontSize, value))
+            {
+                OnPropertyChanged(nameof(DisplayLineHeight));
+            }
+        }
+    }
+
+    public double DisplayLineHeight => Math.Round(DisplayFontSize * 1.4, 1);
 
     public string TooltipText
     {
@@ -118,38 +168,61 @@ public sealed class ClipItem : ObservableObject
 
     public string PinLabel => Pinned ? "取消置顶" : "置顶";
 
+    public string ImageDimensionsLabel => IsImage
+        ? $"{PixelWidth}×{PixelHeight}"
+        : string.Empty;
+
     public ImageSource? ImagePreview
     {
         get
         {
-            if (Kind != ClipContentKind.Image || _imagePreview is not null || ImagePngBase64 is null)
+            if (Kind != ClipContentKind.Image || _imagePreview is not null)
             {
                 return _imagePreview;
             }
 
-            try
+            if (!_imagePreviewLoading && !_imagePreviewLoadAttempted)
             {
-                var bytes = Convert.FromBase64String(ImagePngBase64);
-                var bitmap = new BitmapImage();
-                bitmap.BeginInit();
-                bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                bitmap.DecodePixelWidth = 640;
-                bitmap.StreamSource = new MemoryStream(bytes);
-                bitmap.EndInit();
-                bitmap.Freeze();
-                _imagePreview = bitmap;
-            }
-            catch (FormatException)
-            {
-                _imagePreview = null;
-            }
-            catch (NotSupportedException)
-            {
-                _imagePreview = null;
+                BeginImagePreviewLoad();
             }
 
             return _imagePreview;
         }
+    }
+
+    internal byte[]? GetImageBytes()
+    {
+        if (_imagePngBase64 is not null)
+        {
+            return Convert.FromBase64String(_imagePngBase64);
+        }
+
+        return _imageFilePath is not null && File.Exists(_imageFilePath)
+            ? File.ReadAllBytes(_imageFilePath)
+            : null;
+    }
+
+    internal void AttachImageFile(string imageFilePath, bool notify = true)
+    {
+        if (string.IsNullOrWhiteSpace(imageFilePath))
+        {
+            throw new ArgumentException("Image file path cannot be empty.", nameof(imageFilePath));
+        }
+
+        if (notify)
+        {
+            SetImageStorage(null, imageFilePath);
+            return;
+        }
+
+        _imagePngBase64 = null;
+        _imageFilePath = imageFilePath;
+    }
+
+    internal void ApplyDisplaySettings(int textLimit, double fontSize)
+    {
+        DisplayTextLimit = Math.Max(1, textLimit);
+        DisplayFontSize = Math.Max(1, fontSize);
     }
 
     public static ClipItem Create(ClipContent content)
@@ -166,6 +239,7 @@ public sealed class ClipItem : ObservableObject
         string? rtf,
         string? html,
         string? imagePngBase64,
+        string? imageFilePath,
         int pixelWidth,
         int pixelHeight,
         DateTimeOffset updatedAt,
@@ -181,6 +255,7 @@ public sealed class ClipItem : ObservableObject
             Rtf = rtf,
             Html = html,
             ImagePngBase64 = imagePngBase64,
+            _imageFilePath = imageFilePath,
             PixelWidth = pixelWidth,
             PixelHeight = pixelHeight,
             UpdatedAt = updatedAt,
@@ -204,6 +279,17 @@ public sealed class ClipItem : ObservableObject
                 pixelWidth,
                 pixelHeight).Signature;
         }
+        else if (imageFilePath is not null)
+        {
+            var bytes = item.GetImageBytes();
+            if (bytes is not null)
+            {
+                item.Signature = ClipContent.FromImage(
+                    bytes,
+                    pixelWidth,
+                    pixelHeight).Signature;
+            }
+        }
 
         item.NormalizeAfterLoad();
         return item;
@@ -216,7 +302,9 @@ public sealed class ClipItem : ObservableObject
         PlainText = content.PlainText;
         Rtf = content.Rtf;
         Html = content.Html;
-        ImagePngBase64 = content.ImagePng is null ? null : Convert.ToBase64String(content.ImagePng);
+        SetImageStorage(
+            content.ImagePng is null ? null : Convert.ToBase64String(content.ImagePng),
+            null);
         PixelWidth = content.PixelWidth;
         PixelHeight = content.PixelHeight;
         UpdatedAt = DateTimeOffset.Now;
@@ -227,6 +315,9 @@ public sealed class ClipItem : ObservableObject
         OnPropertyChanged(nameof(TooltipText));
         OnPropertyChanged(nameof(IsText));
         OnPropertyChanged(nameof(IsImage));
+        OnPropertyChanged(nameof(PixelWidth));
+        OnPropertyChanged(nameof(PixelHeight));
+        OnPropertyChanged(nameof(ImageDimensionsLabel));
     }
 
     public void UpdatePlainText(string text)
@@ -248,7 +339,7 @@ public sealed class ClipItem : ObservableObject
         }
 
         var content = ClipContent.FromImage(pngBytes, pixelWidth, pixelHeight);
-        ImagePngBase64 = Convert.ToBase64String(pngBytes);
+        SetImageStorage(Convert.ToBase64String(pngBytes), null);
         PixelWidth = pixelWidth;
         PixelHeight = pixelHeight;
         Signature = content.Signature;
@@ -256,16 +347,184 @@ public sealed class ClipItem : ObservableObject
         Sequence = NextSequence();
         OnPropertyChanged(nameof(UpdatedAt));
         OnPropertyChanged(nameof(ImagePreview));
+        OnPropertyChanged(nameof(PixelWidth));
+        OnPropertyChanged(nameof(PixelHeight));
+        OnPropertyChanged(nameof(ImageDimensionsLabel));
     }
 
     public void NormalizeAfterLoad()
     {
-        _imagePreview = null;
+        ResetImagePreview();
         OnPropertyChanged(nameof(ImagePreview));
         OnPropertyChanged(nameof(DisplayText));
         OnPropertyChanged(nameof(TooltipText));
         OnPropertyChanged(nameof(IsText));
         OnPropertyChanged(nameof(IsImage));
+        OnPropertyChanged(nameof(PixelWidth));
+        OnPropertyChanged(nameof(PixelHeight));
+        OnPropertyChanged(nameof(ImageDimensionsLabel));
+    }
+
+    private void SetImageStorage(string? inlineBase64, string? filePath)
+    {
+        if (string.Equals(_imagePngBase64, inlineBase64, StringComparison.Ordinal)
+            && string.Equals(_imageFilePath, filePath, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _imagePngBase64 = inlineBase64;
+        _imageFilePath = filePath;
+        ResetImagePreview();
+        OnPropertyChanged(nameof(ImagePngBase64));
+        OnPropertyChanged(nameof(ImagePreview));
+    }
+
+    private void BeginImagePreviewLoad()
+    {
+        _imagePreviewLoadAttempted = true;
+        var applicationDispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (applicationDispatcher is null)
+        {
+            try
+            {
+                TryApplyImagePreview(
+                    DecodeThumbnail(GetImageBytes()),
+                    _imagePreviewVersion);
+            }
+            catch (FormatException)
+            {
+                TryApplyImagePreview(null, _imagePreviewVersion);
+            }
+            catch (IOException)
+            {
+                TryApplyImagePreview(null, _imagePreviewVersion);
+            }
+
+            return;
+        }
+
+        _imagePreviewLoading = true;
+        var version = _imagePreviewVersion;
+        var inlineBase64 = _imagePngBase64;
+        var filePath = _imageFilePath;
+        _ = LoadImagePreviewAsync(
+            inlineBase64,
+            filePath,
+            version,
+            applicationDispatcher);
+    }
+
+    private async Task LoadImagePreviewAsync(
+        string? inlineBase64,
+        string? filePath,
+        int version,
+        System.Windows.Threading.Dispatcher dispatcher)
+    {
+        ImageSource? preview = null;
+        await ThumbnailDecodeGate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            byte[]? bytes = null;
+            if (inlineBase64 is not null)
+            {
+                bytes = Convert.FromBase64String(inlineBase64);
+            }
+            else if (filePath is not null && File.Exists(filePath))
+            {
+                bytes = File.ReadAllBytes(filePath);
+            }
+
+            preview = DecodeThumbnail(bytes);
+        }
+        catch (FormatException)
+        {
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+        catch (NotSupportedException)
+        {
+        }
+        finally
+        {
+            ThumbnailDecodeGate.Release();
+        }
+
+        if (dispatcher.HasShutdownStarted || dispatcher.HasShutdownFinished)
+        {
+            return;
+        }
+
+        await dispatcher.InvokeAsync(
+            new Action(() =>
+            {
+                if (version != _imagePreviewVersion)
+                {
+                    return;
+                }
+
+                TryApplyImagePreview(preview, version);
+            }));
+    }
+
+    private void TryApplyImagePreview(ImageSource? preview, int version)
+    {
+        if (version != _imagePreviewVersion)
+        {
+            return;
+        }
+
+        _imagePreviewLoading = false;
+        _imagePreview = preview;
+        OnPropertyChanged(nameof(ImagePreview));
+    }
+
+    private static BitmapImage? DecodeThumbnail(byte[]? bytes)
+    {
+        if (bytes is null || bytes.Length == 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            using var stream = new MemoryStream(bytes, writable: false);
+            var bitmap = new BitmapImage();
+            bitmap.BeginInit();
+            bitmap.CacheOption = BitmapCacheOption.OnLoad;
+            bitmap.DecodePixelWidth = 640;
+            bitmap.StreamSource = stream;
+            bitmap.EndInit();
+            bitmap.Freeze();
+            return bitmap;
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
+        catch (NotSupportedException)
+        {
+            return null;
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
+    }
+
+    private void ResetImagePreview()
+    {
+        _imagePreview = null;
+        _imagePreviewLoading = false;
+        _imagePreviewLoadAttempted = false;
+        unchecked
+        {
+            _imagePreviewVersion++;
+        }
     }
 
     private static long NextSequence()

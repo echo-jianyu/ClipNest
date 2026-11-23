@@ -7,12 +7,22 @@ using ClipNest.Services;
 
 namespace ClipNest.ViewModels;
 
+public enum ClipHistoryFilter
+{
+    All,
+    Text,
+    Image,
+    Pinned
+}
+
 public sealed class MainViewModel : ObservableObject, IDisposable
 {
     public const int HistoryLimit = 50;
+    public const int MaxPinnedItems = 40;
 
     private readonly IClipboardService _clipboardService;
     private readonly ObservableCollection<ClipItem> _items = [];
+    private readonly ObservableCollection<ClipItem> _visibleItems = [];
 
     private bool _isEditing;
     private ClipItem? _editingItem;
@@ -23,6 +33,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private ImageSource? _imageEditPreview;
     private ClipItem? _lastDeletedItem;
     private int _lastDeletedIndex;
+    private ClipItem? _pendingCopyItem;
+    private bool _pendingCopyIncludeFormatting;
+    private bool _copyLoopRunning;
+    private bool _isSearchOpen;
+    private string _searchText = string.Empty;
+    private ClipHistoryFilter _activeFilter = ClipHistoryFilter.All;
+    private int _cardTextLimit = ClipItem.DefaultDisplayTextLimit;
+    private double _cardFontSize = ClipItem.DefaultDisplayFontSize;
     private bool _disposed;
 
     public MainViewModel(IClipboardService clipboardService, IEnumerable<ClipItem> initialItems)
@@ -43,9 +61,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         Resort();
 
         CopyFormattedCommand = new RelayCommand<ClipItem>(
-            item => Copy(item, includeFormatting: true));
+            item => QueueCopy(item, includeFormatting: true));
         CopyPlainCommand = new RelayCommand<ClipItem>(
-            item => Copy(item, includeFormatting: false),
+            item => QueueCopy(item, includeFormatting: false),
             item => item.IsText);
         EditCommand = new RelayCommand<ClipItem>(
             BeginEdit,
@@ -65,11 +83,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             () => IsEditingImage && _workingImage is not null);
         CancelImageEditCommand = new RelayCommand(CancelImageEdit, () => IsEditingImage);
         UndoDeleteCommand = new RelayCommand(UndoDelete, () => _lastDeletedItem is not null);
+        OpenSearchCommand = new RelayCommand(OpenSearch);
+        CloseSearchCommand = new RelayCommand(CloseSearch, () => IsSearchOpen);
+        SetFilterCommand = new RelayCommand<string>(SetFilter);
 
         _clipboardService.ContentChanged += ClipboardContentChanged;
     }
 
     public ObservableCollection<ClipItem> Items => _items;
+
+    public ObservableCollection<ClipItem> VisibleItems => _visibleItems;
 
     public RelayCommand<ClipItem> CopyFormattedCommand { get; }
 
@@ -95,23 +118,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public RelayCommand UndoDeleteCommand { get; }
 
+    public RelayCommand OpenSearchCommand { get; }
+
+    public RelayCommand CloseSearchCommand { get; }
+
+    public RelayCommand<string> SetFilterCommand { get; }
+
     public bool HasItems => _items.Count > 0;
 
-    public string HistorySummary
-    {
-        get
-        {
-            if (_items.Count == 0)
-            {
-                return "等待复制";
-            }
-
-            var pinnedCount = _items.Count(item => item.Pinned);
-            return pinnedCount == 0
-                ? $"{_items.Count} 条"
-                : $"{_items.Count} 条 · {pinnedCount} 置顶";
-        }
-    }
+    public bool HasVisibleItems => _visibleItems.Count > 0;
 
     public bool IsEditing
     {
@@ -159,6 +174,62 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
     }
 
+    public bool IsSearchOpen
+    {
+        get => _isSearchOpen;
+        private set
+        {
+            if (SetProperty(ref _isSearchOpen, value))
+            {
+                CloseSearchCommand.RaiseCanExecuteChanged();
+            }
+        }
+    }
+
+    public string SearchText
+    {
+        get => _searchText;
+        set
+        {
+            if (SetProperty(ref _searchText, value ?? string.Empty))
+            {
+                ApplyFilter();
+            }
+        }
+    }
+
+    public ClipHistoryFilter ActiveFilter
+    {
+        get => _activeFilter;
+        private set
+        {
+            if (SetProperty(ref _activeFilter, value))
+            {
+                OnPropertyChanged(nameof(IsAllFilter));
+                OnPropertyChanged(nameof(IsTextFilter));
+                OnPropertyChanged(nameof(IsImageFilter));
+                OnPropertyChanged(nameof(IsPinnedFilter));
+                ApplyFilter();
+            }
+        }
+    }
+
+    public bool IsAllFilter => ActiveFilter == ClipHistoryFilter.All;
+
+    public bool IsTextFilter => ActiveFilter == ClipHistoryFilter.Text;
+
+    public bool IsImageFilter => ActiveFilter == ClipHistoryFilter.Image;
+
+    public bool IsPinnedFilter => ActiveFilter == ClipHistoryFilter.Pinned;
+
+    public string EmptyStateTitle => HasItems
+        ? "没有匹配的记录"
+        : "粘贴板还是空的";
+
+    public string EmptyStateDetail => HasItems
+        ? "换个关键词或筛选条件试试"
+        : string.Empty;
+
     public ImageSource? ImageEditPreview
     {
         get => _imageEditPreview;
@@ -169,7 +240,19 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public event EventHandler? HistoryChanged;
 
+    public event EventHandler? ItemCopied;
+
     public event Action<string, bool>? NotificationRequested;
+
+    public void ApplyDisplaySettings(int textLimit, double fontSize)
+    {
+        _cardTextLimit = Math.Max(1, textLimit);
+        _cardFontSize = Math.Max(1, fontSize);
+        foreach (var item in _items)
+        {
+            item.ApplyDisplaySettings(_cardTextLimit, _cardFontSize);
+        }
+    }
 
     public void ClearHistory()
     {
@@ -179,8 +262,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
 
         _items.Clear();
+        _visibleItems.Clear();
         _lastDeletedItem = null;
         CloseAllEditors();
+        OnPropertyChanged(nameof(HasVisibleItems));
+        OnPropertyChanged(nameof(EmptyStateTitle));
+        OnPropertyChanged(nameof(EmptyStateDetail));
         NotifyHistoryChanged();
         NotificationRequested?.Invoke("历史记录已清空", false);
     }
@@ -199,7 +286,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
         else
         {
-            _items.Insert(0, ClipItem.Create(content));
+            var newItem = ClipItem.Create(content);
+            newItem.ApplyDisplaySettings(_cardTextLimit, _cardFontSize);
+            _items.Insert(0, newItem);
+            TrimToLimit(newItem);
         }
 
         TrimToLimit();
@@ -218,22 +308,63 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         NotifyHistoryChanged();
     }
 
-    private void Copy(ClipItem item, bool includeFormatting)
+    private void QueueCopy(ClipItem item, bool includeFormatting)
     {
-        var copied = _clipboardService.Copy(item, includeFormatting);
-        if (!copied)
+        _pendingCopyItem = item;
+        _pendingCopyIncludeFormatting = includeFormatting;
+        if (!_copyLoopRunning)
         {
-            NotificationRequested?.Invoke("复制失败，请稍后重试", false);
-            return;
+            _ = RunCopyQueueAsync();
         }
+    }
 
-        var message = item.IsImage
-            ? "图片已复制"
-            : includeFormatting
-                ? "已复制，格式已保留"
-                : "已复制纯文本";
+    private async Task RunCopyQueueAsync()
+    {
+        _copyLoopRunning = true;
+        try
+        {
+            while (!_disposed && _pendingCopyItem is not null)
+            {
+                var item = _pendingCopyItem;
+                var includeFormatting = _pendingCopyIncludeFormatting;
+                _pendingCopyItem = null;
 
-        NotificationRequested?.Invoke(message, false);
+                bool copied;
+                try
+                {
+                    copied = await _clipboardService
+                        .CopyAsync(item, includeFormatting)
+                        .ConfigureAwait(true);
+                }
+                catch (Exception exception) when (
+                    exception is FormatException
+                    or IOException
+                    or UnauthorizedAccessException
+                    or System.Runtime.InteropServices.ExternalException
+                    or InvalidOperationException
+                    or NotSupportedException
+                    or ObjectDisposedException)
+                {
+                    copied = false;
+                }
+
+                if (!copied)
+                {
+                    NotificationRequested?.Invoke("复制失败，请稍后重试", false);
+                    continue;
+                }
+
+                ItemCopied?.Invoke(this, EventArgs.Empty);
+            }
+        }
+        finally
+        {
+            _copyLoopRunning = false;
+            if (!_disposed && _pendingCopyItem is not null)
+            {
+                _ = RunCopyQueueAsync();
+            }
+        }
     }
 
     private void BeginEdit(ClipItem item)
@@ -271,6 +402,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         EditingItem.UpdatePlainText(EditText);
         CloseEditor();
+        Resort();
         NotifyHistoryChanged();
         NotificationRequested?.Invoke("记录已更新", false);
     }
@@ -282,14 +414,21 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private void BeginImageEdit(ClipItem item)
     {
-        if (!item.IsImage || string.IsNullOrWhiteSpace(item.ImagePngBase64))
+        if (!item.IsImage)
         {
             return;
         }
 
         try
         {
-            var image = DecodeImage(Convert.FromBase64String(item.ImagePngBase64));
+            var bytes = item.GetImageBytes();
+            if (bytes is null)
+            {
+                NotificationRequested?.Invoke("图片数据不可用，无法编辑", false);
+                return;
+            }
+
+            var image = DecodeImage(bytes);
             EditingImageItem = item;
             _workingImage = image;
             ImageEditPreview = image;
@@ -367,6 +506,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _lastDeletedItem = item;
         _lastDeletedIndex = index;
         _items.RemoveAt(index);
+        ApplyFilter();
         UndoDeleteCommand.RaiseCanExecuteChanged();
         OnPropertyChanged(nameof(CanUndoDelete));
         NotifyHistoryChanged();
@@ -393,17 +533,28 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private void TogglePin(ClipItem item)
     {
+        if (!item.Pinned
+            && _items.Count(candidate => candidate.Pinned) >= MaxPinnedItems)
+        {
+            NotificationRequested?.Invoke(
+                $"最多支持置顶 {MaxPinnedItems} 条记录",
+                false);
+            return;
+        }
+
         item.Pinned = !item.Pinned;
         Resort();
         NotifyHistoryChanged();
         NotificationRequested?.Invoke(item.Pinned ? "已置顶" : "已取消置顶", false);
     }
 
-    private void TrimToLimit()
+    private void TrimToLimit(ClipItem? protectedItem = null)
     {
         while (_items.Count > HistoryLimit)
         {
-            var removable = _items.LastOrDefault(item => !item.Pinned)
+            var removable = _items.LastOrDefault(
+                    item => !item.Pinned && !ReferenceEquals(item, protectedItem))
+                ?? _items.LastOrDefault(item => !ReferenceEquals(item, protectedItem))
                 ?? _items[_items.Count - 1];
             _items.Remove(removable);
         }
@@ -428,6 +579,68 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 _items.Move(currentIndex, targetIndex);
             }
         }
+
+        ApplyFilter();
+    }
+
+    private void OpenSearch()
+    {
+        IsSearchOpen = true;
+    }
+
+    private void CloseSearch()
+    {
+        SearchText = string.Empty;
+        ActiveFilter = ClipHistoryFilter.All;
+        IsSearchOpen = false;
+    }
+
+    private void SetFilter(string filter)
+    {
+        if (Enum.TryParse(filter, ignoreCase: true, out ClipHistoryFilter parsed))
+        {
+            ActiveFilter = parsed;
+        }
+    }
+
+    private void ApplyFilter()
+    {
+        var query = SearchText.Trim();
+        var matches = _items.Where(item => MatchesFilter(item, query)).ToList();
+
+        _visibleItems.Clear();
+        foreach (var item in matches)
+        {
+            _visibleItems.Add(item);
+        }
+
+        OnPropertyChanged(nameof(HasVisibleItems));
+        OnPropertyChanged(nameof(EmptyStateTitle));
+        OnPropertyChanged(nameof(EmptyStateDetail));
+    }
+
+    private bool MatchesFilter(ClipItem item, string query)
+    {
+        if (ActiveFilter == ClipHistoryFilter.Text && !item.IsText)
+        {
+            return false;
+        }
+
+        if (ActiveFilter == ClipHistoryFilter.Image && !item.IsImage)
+        {
+            return false;
+        }
+
+        if (ActiveFilter == ClipHistoryFilter.Pinned && !item.Pinned)
+        {
+            return false;
+        }
+
+        return query.Length == 0
+            || (item.IsText
+                && item.PlainText.IndexOf(
+                    query,
+                    StringComparison.OrdinalIgnoreCase) >= 0);
     }
 
     private void CloseEditor()
@@ -466,7 +679,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private void NotifyHistoryChanged()
     {
         OnPropertyChanged(nameof(HasItems));
-        OnPropertyChanged(nameof(HistorySummary));
         HistoryChanged?.Invoke(this, EventArgs.Empty);
     }
 

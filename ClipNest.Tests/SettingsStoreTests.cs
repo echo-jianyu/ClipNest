@@ -32,6 +32,11 @@ public sealed class SettingsStoreTests
             Assert.Equal(300, settings.Height);
             Assert.Equal(120, settings.Left);
             Assert.Equal(64, settings.Top);
+            Assert.Equal(HotKeyDefinition.Default.Modifiers, settings.HotKeyModifiers);
+            Assert.Equal(HotKeyDefinition.Default.VirtualKey, settings.HotKeyKey);
+            Assert.False(settings.HideAfterCopy);
+            Assert.Equal(40, settings.CardTextLimit);
+            Assert.Equal(13.5, settings.CardFontSize);
         }
         finally
         {
@@ -52,7 +57,12 @@ public sealed class SettingsStoreTests
             {
                 Width = 480,
                 Left = 88,
-                Top = 32
+                Top = 32,
+                HotKeyModifiers = HotKeyDefinition.ControlModifier,
+                HotKeyKey = 0x56,
+                HideAfterCopy = true,
+                CardTextLimit = 72,
+                CardFontSize = 15
             });
 
             var settings = await store.LoadAsync();
@@ -61,6 +71,11 @@ public sealed class SettingsStoreTests
             Assert.Equal(320, settings.Height);
             Assert.Equal(88, settings.Left);
             Assert.Equal(32, settings.Top);
+            Assert.Equal(HotKeyDefinition.ControlModifier, settings.HotKeyModifiers);
+            Assert.Equal(0x56u, settings.HotKeyKey);
+            Assert.True(settings.HideAfterCopy);
+            Assert.Equal(72, settings.CardTextLimit);
+            Assert.Equal(15, settings.CardFontSize);
         }
         finally
         {

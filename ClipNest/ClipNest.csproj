@@ -11,7 +11,7 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>ClipNest</AssemblyName>
     <RootNamespace>ClipNest</RootNamespace>
-    <Version>1.0.0</Version>
+    <Version>1.2.1</Version>
     <Authors>ClipNest contributors</Authors>
     <Description>A compact, always-on-top clipboard history for Windows.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

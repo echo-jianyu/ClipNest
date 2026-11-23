@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Interop;
 using ClipNest.Infrastructure;
+using ClipNest.Models;
 
 namespace ClipNest.Services;
 
@@ -11,14 +12,22 @@ public sealed class HotKeyService : IDisposable
     private IntPtr _windowHandle;
     private HwndSource? _source;
     private bool _registered;
+    private HotKeyDefinition _hotKey = HotKeyDefinition.Default;
 
     public event EventHandler? Pressed;
 
-    public bool Attach(Window window)
+    public HotKeyDefinition CurrentHotKey => _hotKey;
+
+    public bool Attach(Window window, HotKeyDefinition hotKey)
     {
         if (window is null)
         {
             throw new ArgumentNullException(nameof(window));
+        }
+
+        if (hotKey is null)
+        {
+            throw new ArgumentNullException(nameof(hotKey));
         }
 
         if (_windowHandle != IntPtr.Zero)
@@ -27,21 +36,56 @@ public sealed class HotKeyService : IDisposable
         }
 
         _windowHandle = new WindowInteropHelper(window).Handle;
-        _registered = NativeMethods.RegisterHotKey(
-            _windowHandle,
-            HotKeyId,
-            NativeMethods.ModNoRepeat,
-            NativeMethods.VkF4);
-
-        if (!_registered)
+        _source = HwndSource.FromHwnd(_windowHandle);
+        if (_source is null)
         {
             _windowHandle = IntPtr.Zero;
             return false;
         }
 
-        _source = HwndSource.FromHwnd(_windowHandle);
-        _source?.AddHook(WindowMessageHook);
-        return true;
+        _source.AddHook(WindowMessageHook);
+        _hotKey = hotKey;
+        _registered = TryRegister(hotKey);
+        return _registered;
+    }
+
+    public bool UpdateHotKey(HotKeyDefinition hotKey)
+    {
+        if (hotKey is null)
+        {
+            throw new ArgumentNullException(nameof(hotKey));
+        }
+
+        if (_windowHandle == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        var previous = _hotKey;
+        if (_registered)
+        {
+            NativeMethods.UnregisterHotKey(_windowHandle, HotKeyId);
+            _registered = false;
+        }
+
+        if (TryRegister(hotKey))
+        {
+            _hotKey = hotKey;
+            return true;
+        }
+
+        _registered = TryRegister(previous);
+        _hotKey = previous;
+        return false;
+    }
+
+    private bool TryRegister(HotKeyDefinition hotKey)
+    {
+        return NativeMethods.RegisterHotKey(
+            _windowHandle,
+            HotKeyId,
+            hotKey.Modifiers | NativeMethods.ModNoRepeat,
+            hotKey.VirtualKey);
     }
 
     private IntPtr WindowMessageHook(
@@ -76,5 +120,6 @@ public sealed class HotKeyService : IDisposable
         _source = null;
         _windowHandle = IntPtr.Zero;
         _registered = false;
+        _hotKey = HotKeyDefinition.Default;
     }
 }

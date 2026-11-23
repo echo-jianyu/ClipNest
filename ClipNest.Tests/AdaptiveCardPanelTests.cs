@@ -61,4 +61,17 @@ public sealed class AdaptiveCardPanelTests
 
         Assert.True(mediumHeight > shortHeight);
     }
+
+    [Fact]
+    public void TextHeight_RespectsConfiguredFontSize()
+    {
+        var small = ClipItem.Create(ClipContent.FromText(new string('a', 60)));
+        var large = ClipItem.Create(ClipContent.FromText(new string('a', 60)));
+        small.ApplyDisplaySettings(40, 11);
+        large.ApplyDisplaySettings(40, 18);
+
+        Assert.True(
+            AdaptiveCardPanel.CalculateCardHeight(large, 210)
+            > AdaptiveCardPanel.CalculateCardHeight(small, 210));
+    }
 }

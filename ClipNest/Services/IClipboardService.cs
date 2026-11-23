@@ -11,5 +11,5 @@ public interface IClipboardService : IDisposable
 
     void Detach();
 
-    bool Copy(ClipItem item, bool includeFormatting);
+    Task<bool> CopyAsync(ClipItem item, bool includeFormatting);
 }

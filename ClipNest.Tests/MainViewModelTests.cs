@@ -1,3 +1,7 @@
+using System.IO;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using ClipNest.Controls;
 using ClipNest.Models;
 using ClipNest.ViewModels;
 
@@ -96,6 +100,23 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
+    public void EditingOlderText_MovesRecordToNewestPosition()
+    {
+        using var clipboard = new FakeClipboardService();
+        using var viewModel = new MainViewModel(clipboard, []);
+        clipboard.Emit(ClipContent.FromText("alpha"));
+        clipboard.Emit(ClipContent.FromText("beta"));
+        clipboard.Emit(ClipContent.FromText("gamma"));
+        var alpha = viewModel.Items.Single(item => item.PlainText == "alpha");
+
+        viewModel.EditCommand.Execute(alpha);
+        viewModel.EditText = "alpha edited";
+        viewModel.SaveEditCommand.Execute(null);
+
+        Assert.Same(alpha, viewModel.Items[0]);
+    }
+
+    [Fact]
     public void DeleteAndUndo_RestoresDeletedRecord()
     {
         using var clipboard = new FakeClipboardService();
@@ -134,11 +155,12 @@ public sealed class MainViewModelTests
         using var clipboard = new FakeClipboardService();
         using var viewModel = new MainViewModel(clipboard, []);
         clipboard.Emit(ClipContent.FromImage(
-            Convert.FromBase64String(OnePixelPngBase64),
-            1,
-            1));
+            EncodePng(4, 2),
+            4,
+            2));
         var image = viewModel.Items[0];
 
+        Assert.True(AdaptiveCardPanel.ShouldSpanColumns(image, 210, 2));
         Assert.True(viewModel.EditCommand.CanExecute(image));
         viewModel.EditCommand.Execute(image);
         Assert.True(viewModel.IsEditingImage);
@@ -149,8 +171,9 @@ public sealed class MainViewModelTests
 
         Assert.False(viewModel.IsEditingImage);
         Assert.NotNull(image.ImagePngBase64);
-        Assert.Equal(1, image.PixelWidth);
-        Assert.Equal(1, image.PixelHeight);
+        Assert.Equal(2, image.PixelWidth);
+        Assert.Equal(4, image.PixelHeight);
+        Assert.False(AdaptiveCardPanel.ShouldSpanColumns(image, 210, 2));
     }
 
     [Fact]
@@ -176,6 +199,9 @@ public sealed class MainViewModelTests
     {
         using var clipboard = new FakeClipboardService();
         using var viewModel = new MainViewModel(clipboard, []);
+        var notifications = new List<(string Message, bool CanUndo)>();
+        viewModel.NotificationRequested += (message, canUndo) =>
+            notifications.Add((message, canUndo));
         clipboard.Emit(ClipContent.FromText("alpha"));
 
         viewModel.CopyFormattedCommand.Execute(viewModel.Items[0]);
@@ -185,6 +211,39 @@ public sealed class MainViewModelTests
         Assert.Equal(2, clipboard.Copies.Count);
         Assert.True(clipboard.Copies[0].IncludeFormatting);
         Assert.False(clipboard.Copies[1].IncludeFormatting);
+        Assert.Empty(notifications);
+    }
+
+    [Fact]
+    public async Task Copy_DoesNotBlockAndCoalescesLatestRapidRequest()
+    {
+        using var clipboard = new FakeClipboardService();
+        using var viewModel = new MainViewModel(clipboard, []);
+        clipboard.Emit(ClipContent.FromText("first"));
+        clipboard.Emit(ClipContent.FromText("second"));
+        var firstCopy = new TaskCompletionSource<bool>();
+        clipboard.CopyHandler = (_, _) => firstCopy.Task;
+        var first = viewModel.Items[1];
+        var second = viewModel.Items[0];
+
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        viewModel.CopyFormattedCommand.Execute(first);
+        viewModel.CopyFormattedCommand.Execute(second);
+        stopwatch.Stop();
+
+        Assert.True(stopwatch.ElapsedMilliseconds < 250);
+        Assert.Single(clipboard.Copies);
+        Assert.Same(first, clipboard.Copies[0].Item);
+
+        clipboard.CopyHandler = (_, _) => Task.FromResult(true);
+        firstCopy.SetResult(true);
+        for (var attempt = 0; attempt < 20 && clipboard.Copies.Count < 2; attempt++)
+        {
+            await Task.Delay(10);
+        }
+
+        Assert.Equal(2, clipboard.Copies.Count);
+        Assert.Same(second, clipboard.Copies[1].Item);
     }
 
     [Fact]
@@ -199,5 +258,104 @@ public sealed class MainViewModelTests
 
         Assert.Empty(viewModel.Items);
         Assert.False(viewModel.HasItems);
+    }
+
+    [Fact]
+    public void NewClipboardContent_SurvivesWhenHistoryIsAllPinned()
+    {
+        using var clipboard = new FakeClipboardService();
+        var pinnedItems = Enumerable.Range(0, MainViewModel.HistoryLimit)
+            .Select(index =>
+            {
+                var item = ClipItem.Create(ClipContent.FromText($"pinned-{index}"));
+                item.Pinned = true;
+                return item;
+            })
+            .ToList();
+        using var viewModel = new MainViewModel(clipboard, pinnedItems);
+
+        clipboard.Emit(ClipContent.FromText("new content"));
+
+        Assert.Equal(MainViewModel.HistoryLimit, viewModel.Items.Count);
+        Assert.Contains(viewModel.Items, item => item.PlainText == "new content");
+    }
+
+    [Fact]
+    public void TogglePin_RejectsPinningBeyondConfiguredLimit()
+    {
+        using var clipboard = new FakeClipboardService();
+        var pinnedItems = Enumerable.Range(0, MainViewModel.MaxPinnedItems)
+            .Select(index =>
+            {
+                var item = ClipItem.Create(ClipContent.FromText($"pinned-{index}"));
+                item.Pinned = true;
+                return item;
+            })
+            .ToList();
+        var extra = ClipItem.Create(ClipContent.FromText("extra"));
+        var allItems = pinnedItems.Append(extra).ToList();
+        using var viewModel = new MainViewModel(clipboard, allItems);
+
+        viewModel.TogglePinCommand.Execute(extra);
+
+        Assert.False(extra.Pinned);
+    }
+
+    [Fact]
+    public void SearchAndFilter_UpdateVisibleItems()
+    {
+        using var clipboard = new FakeClipboardService();
+        using var viewModel = new MainViewModel(clipboard, []);
+        clipboard.Emit(ClipContent.FromText("alpha note"));
+        clipboard.Emit(ClipContent.FromText("beta note"));
+        clipboard.Emit(ClipContent.FromImage(
+            Convert.FromBase64String(OnePixelPngBase64),
+            2,
+            2));
+
+        viewModel.OpenSearchCommand.Execute(null);
+        viewModel.SearchText = "alpha";
+        Assert.Single(viewModel.VisibleItems);
+
+        viewModel.SearchText = string.Empty;
+        viewModel.SetFilterCommand.Execute("Image");
+        Assert.Single(viewModel.VisibleItems);
+        Assert.True(viewModel.VisibleItems[0].IsImage);
+    }
+
+    [Fact]
+    public void ApplyDisplaySettings_UpdatesExistingAndNewCards()
+    {
+        using var clipboard = new FakeClipboardService();
+        using var viewModel = new MainViewModel(clipboard, []);
+        clipboard.Emit(ClipContent.FromText("existing"));
+        var existing = viewModel.Items[0];
+
+        viewModel.ApplyDisplaySettings(textLimit: 64, fontSize: 16);
+        clipboard.Emit(ClipContent.FromText("new item"));
+
+        Assert.Equal(64, existing.DisplayTextLimit);
+        Assert.Equal(16, existing.DisplayFontSize);
+        Assert.Equal(64, viewModel.Items[0].DisplayTextLimit);
+        Assert.Equal(16, viewModel.Items[0].DisplayFontSize);
+    }
+
+    private static byte[] EncodePng(int width, int height)
+    {
+        var pixels = Enumerable.Repeat((byte)255, width * height * 4).ToArray();
+        var bitmap = BitmapSource.Create(
+            width,
+            height,
+            96,
+            96,
+            PixelFormats.Bgra32,
+            palette: null,
+            pixels,
+            width * 4);
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        using var stream = new MemoryStream();
+        encoder.Save(stream);
+        return stream.ToArray();
     }
 }
