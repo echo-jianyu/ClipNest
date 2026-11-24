@@ -158,13 +158,25 @@ internal static class Program
         Window window,
         string outputPath)
     {
-        var pixelWidth = (int)Math.Round(window.Width * 2);
-        var pixelHeight = (int)Math.Round(window.Height * 2);
         var content = (FrameworkElement)window.Content;
-        content.Measure(new Size(window.Width, window.Height));
-        content.Arrange(new Rect(0, 0, window.Width, window.Height));
+        var measureWidth = window.SizeToContent is SizeToContent.Width or SizeToContent.WidthAndHeight
+            ? double.PositiveInfinity
+            : window.Width;
+        var measureHeight = window.SizeToContent is SizeToContent.Height or SizeToContent.WidthAndHeight
+            ? double.PositiveInfinity
+            : window.Height;
+        content.Measure(new Size(measureWidth, measureHeight));
+        var renderWidth = window.SizeToContent is SizeToContent.Width or SizeToContent.WidthAndHeight
+            ? content.DesiredSize.Width
+            : window.Width;
+        var renderHeight = window.SizeToContent is SizeToContent.Height or SizeToContent.WidthAndHeight
+            ? content.DesiredSize.Height
+            : window.Height;
+        content.Arrange(new Rect(0, 0, renderWidth, renderHeight));
         content.UpdateLayout();
 
+        var pixelWidth = (int)Math.Round(renderWidth * 2);
+        var pixelHeight = (int)Math.Round(renderHeight * 2);
         var rendered = new RenderTargetBitmap(
             pixelWidth,
             pixelHeight,

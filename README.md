@@ -82,6 +82,11 @@ dotnet publish ClipNest/ClipNest.csproj `
 发布目录为 `artifacts/windows-<版本>`，其中只包含一个
 `ClipNest-<版本>.exe`，复制该文件即可直接运行。
 
+普通内部修改只提交并同步 `main` 分支，不自动创建版本标签或发行版。只有明确
+执行发布时才创建版本标签，并手动运行 GitHub `release` 工作流。GitHub Release
+只附加版本化 EXE，不生成 ZIP。Gitee 的 Tag 和发行版是两套独立对象，因此
+Gitee Release 需要在发布时通过 Gitee OpenAPI 单独创建并上传同一个 EXE。
+
 ## 数据与隐私
 
 历史仅保存在本机：

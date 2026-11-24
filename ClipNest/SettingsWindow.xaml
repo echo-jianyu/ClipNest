@@ -4,7 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="设置"
     Width="450"
-    Height="470"
+    SizeToContent="Height"
     AllowsTransparency="True"
     Background="Transparent"
     FontFamily="Microsoft YaHei UI"
