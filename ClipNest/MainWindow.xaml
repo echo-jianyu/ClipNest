@@ -33,10 +33,9 @@
             x:Name="WindowSurface"
             Margin="6"
             Background="{StaticResource PanelBrush}"
-            BorderBrush="{StaticResource WindowEdgeBrush}"
-            BorderThickness="1.5"
-            CornerRadius="13"
-            SnapsToDevicePixels="True"
+            BorderBrush="{StaticResource LineBrush}"
+            BorderThickness="1"
+            CornerRadius="12"
             MouseLeftButtonDown="Root_MouseLeftButtonDown">
             <Grid>
                 <Grid.RowDefinitions>
@@ -636,7 +635,7 @@
             Panel.ZIndex="35"
             Width="19"
             Height="19"
-            Margin="0,0,7,7"
+            Margin="0,0,3,3"
             HorizontalAlignment="Right"
             VerticalAlignment="Bottom"
             Cursor="SizeNWSE"
