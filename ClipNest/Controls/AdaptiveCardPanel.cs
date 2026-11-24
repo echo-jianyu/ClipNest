@@ -35,16 +35,12 @@ public sealed class AdaptiveCardPanel : Panel
 
         if (item.IsImage)
         {
-            var naturalWidth = item.PixelWidth + ImageCardInset;
-            var spanWidth = (columnWidth * columnCount)
-                + (Gap * (columnCount - 1));
             return item.PixelHeight > 0
                 && (double)item.PixelWidth / item.PixelHeight >= 1.6
-                && naturalWidth > columnWidth
-                && naturalWidth >= spanWidth * 0.85;
+                && item.PixelWidth + ImageCardInset > columnWidth;
         }
 
-        var textLength = item.DisplayText.Length;
+        var textLength = NormalizeText(item.PlainText).Length;
         var threshold = columnWidth >= 260 ? 90 : 58;
         return textLength > threshold;
     }
@@ -77,13 +73,13 @@ public sealed class AdaptiveCardPanel : Panel
                 Math.Max(48, displayHeight + ImageCardInset));
         }
 
-        var visualLength = EstimateVisualLength(item.DisplayText);
-        var visualUnitsPerLine = Math.Max(
+        var charactersPerLine = Math.Max(
             8,
-            cardWidth / Math.Max(1, item.DisplayFontSize * 0.95));
+            (int)(cardWidth / Math.Max(1, item.DisplayFontSize * 1.04)));
+        var textLength = Math.Max(1, item.DisplayText.Length);
         var lineCount = Math.Min(
             6,
-            Math.Max(1, (int)Math.Ceiling(visualLength / visualUnitsPerLine)));
+            Math.Max(1, (int)Math.Ceiling((double)textLength / charactersPerLine)));
         return Math.Min(
             140,
             Math.Max(
@@ -251,15 +247,11 @@ public sealed class AdaptiveCardPanel : Panel
         }
     }
 
-    private static double EstimateVisualLength(string text)
+    private static string NormalizeText(string text)
     {
-        var length = 0d;
-        foreach (var character in text)
-        {
-            length += character <= 0x7F ? 0.56 : 1;
-        }
-
-        return Math.Max(1, length);
+        return string.Join(
+            " ",
+            text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
     }
 
     private sealed class CardPlacement

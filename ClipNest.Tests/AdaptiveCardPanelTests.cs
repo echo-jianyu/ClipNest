@@ -18,13 +18,10 @@ public sealed class AdaptiveCardPanelTests
     }
 
     [Fact]
-    public void TruncatedText_UsesDisplayLengthForSpanDecision()
+    public void LongText_SpansColumnsWhenNotPinned()
     {
         var item = ClipItem.Create(ClipContent.FromText(new string('a', 120)));
 
-        Assert.False(AdaptiveCardPanel.ShouldSpanColumns(item, 210, 2));
-
-        item.ApplyDisplaySettings(textLimit: 100, fontSize: 13.5);
         Assert.True(AdaptiveCardPanel.ShouldSpanColumns(item, 210, 2));
 
         item.Pinned = true;
@@ -60,7 +57,7 @@ public sealed class AdaptiveCardPanelTests
     {
         var item = ClipItem.Create(ClipContent.FromImage([1], 266, 125));
 
-        Assert.False(AdaptiveCardPanel.ShouldSpanColumns(item, 210, 2));
+        Assert.True(AdaptiveCardPanel.ShouldSpanColumns(item, 210, 2));
         var width = AdaptiveCardPanel.CalculateCardWidth(item, 436);
         var height = AdaptiveCardPanel.CalculateCardHeight(item, width);
 
@@ -80,14 +77,14 @@ public sealed class AdaptiveCardPanelTests
     }
 
     [Fact]
-    public void WideImageCard_SpansFromTheLeftEdgeAndUsesFullWidth()
+    public void WideImageCard_SpansFromTheLeftEdge()
     {
         RunOnSta(() =>
         {
             var panel = new AdaptiveCardPanel();
             var card = new Border
             {
-                DataContext = ClipItem.Create(ClipContent.FromImage([1], 600, 240))
+                DataContext = ClipItem.Create(ClipContent.FromImage([1], 266, 125))
             };
             panel.Children.Add(card);
 
@@ -95,7 +92,7 @@ public sealed class AdaptiveCardPanelTests
             panel.Arrange(new Rect(0, 0, 450, 300));
 
             Assert.Equal(0, card.TranslatePoint(new Point(0, 0), panel).X);
-            Assert.Equal(450, card.ActualWidth);
+            Assert.Equal(278, card.ActualWidth);
         });
     }
 
@@ -123,17 +120,6 @@ public sealed class AdaptiveCardPanelTests
         Assert.True(
             AdaptiveCardPanel.CalculateCardHeight(large, 210)
             > AdaptiveCardPanel.CalculateCardHeight(small, 210));
-    }
-
-    [Fact]
-    public void TextHeight_UsesNarrowerWidthForAsciiThanCjk()
-    {
-        var ascii = ClipItem.Create(ClipContent.FromText(new string('a', 60)));
-        var cjk = ClipItem.Create(ClipContent.FromText(new string('字', 60)));
-
-        Assert.True(
-            AdaptiveCardPanel.CalculateCardHeight(ascii, 210)
-            < AdaptiveCardPanel.CalculateCardHeight(cjk, 210));
     }
 
     private static void RunOnSta(Action action)
