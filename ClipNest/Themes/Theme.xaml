@@ -8,7 +8,7 @@
     <Color x:Key="WindowEdgeColor">#FFD3DCD7</Color>
     <Color x:Key="CanvasColor">#FFFFFFFF</Color>
     <Color x:Key="PanelColor">#FFFFFFFF</Color>
-    <Color x:Key="HistorySurfaceColor">#FFF4F9F6</Color>
+    <Color x:Key="HistorySurfaceColor">#FFF8FCFA</Color>
     <Color x:Key="ChromeColor">#FFEDF5F1</Color>
     <Color x:Key="AccentColor">#FFDF6049</Color>
     <Color x:Key="AccentSoftColor">#FFFFEDE8</Color>
