@@ -55,9 +55,15 @@ jobs:
             throw "Release executable not found: $asset"
           }
 
-          $existing = gh release view $tag --json assets 2>$null
-          if ($LASTEXITCODE -eq 0) {
-            $release = $existing | ConvertFrom-Json
+          $headers = @{
+            Authorization = "Bearer $env:GH_TOKEN"
+            Accept = "application/vnd.github+json"
+            "X-GitHub-Api-Version" = "2022-11-28"
+          }
+          try {
+            $release = Invoke-RestMethod `
+              -Headers $headers `
+              -Uri "https://api.github.com/repos/${{ github.repository }}/releases/tags/$tag"
             foreach ($item in $release.assets) {
               if ($item.name -ne $expectedAsset) {
                 gh release delete-asset $tag $item.name --yes
@@ -66,8 +72,12 @@ jobs:
 
             gh release upload $tag $asset --clobber
           }
-          else {
+          catch {
+            if ($_.Exception.Response.StatusCode.value__ -ne 404) {
+              throw
+            }
+
             gh release create $tag $asset `
               --title "ClipNest $version" `
-              --generate-notes
+              --notes "ClipNest $version"
           }
