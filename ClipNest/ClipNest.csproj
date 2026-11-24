@@ -9,9 +9,11 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ApplicationIcon>Assets\ClipNest.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <GenerateSupportedRuntime>false</GenerateSupportedRuntime>
     <AssemblyName>ClipNest</AssemblyName>
     <RootNamespace>ClipNest</RootNamespace>
-    <Version>1.2.1</Version>
+    <Version>1.2.4</Version>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <Authors>ClipNest contributors</Authors>
     <Description>A compact, always-on-top clipboard history for Windows.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

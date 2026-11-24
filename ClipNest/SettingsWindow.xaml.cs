@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using ClipNest.Infrastructure;
 using ClipNest.Models;
 
 namespace ClipNest;
@@ -14,12 +15,15 @@ public partial class SettingsWindow : Window
     public SettingsWindow(
         int cardTextLimit,
         double cardFontSize,
-        HotKeyDefinition hotKey)
+        HotKeyDefinition hotKey,
+        bool hideAfterCopy)
     {
         InitializeComponent();
         TextLimitTextBox.Text = cardTextLimit.ToString(CultureInfo.CurrentCulture);
         FontSizeTextBox.Text = cardFontSize.ToString("0.#", CultureInfo.CurrentCulture);
         _hotKey = hotKey ?? throw new ArgumentNullException(nameof(hotKey));
+        HideAfterCopyCheckBox.IsChecked = hideAfterCopy;
+        VersionTextBlock.Text = $"ClipNest {AppVersion.Display}";
         UpdateHotKeyButton();
     }
 
@@ -30,6 +34,8 @@ public partial class SettingsWindow : Window
         ClipItem.DefaultDisplayFontSize;
 
     public HotKeyDefinition HotKey => _hotKey;
+
+    public bool HideAfterCopy { get; private set; }
 
     private void SaveButton_Click(object sender, RoutedEventArgs eventArgs)
     {
@@ -53,6 +59,7 @@ public partial class SettingsWindow : Window
         CardFontSize = Math.Min(
             Math.Max(fontSize, AppSettings.MinimumCardFontSize),
             AppSettings.MaximumCardFontSize);
+        HideAfterCopy = HideAfterCopyCheckBox.IsChecked == true;
         DialogResult = true;
     }
 
@@ -67,6 +74,16 @@ public partial class SettingsWindow : Window
         HotKeyButton.Content = "请按组合键…";
         HotKeyButton.Focus();
         Keyboard.Focus(HotKeyButton);
+        eventArgs.Handled = true;
+    }
+
+    private void AboutButton_Click(object sender, RoutedEventArgs eventArgs)
+    {
+        var dialog = new AboutWindow
+        {
+            Owner = this
+        };
+        dialog.ShowDialog();
         eventArgs.Handled = true;
     }
 

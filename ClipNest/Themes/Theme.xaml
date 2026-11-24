@@ -5,6 +5,7 @@
     <Color x:Key="InkColor">#FF1D282A</Color>
     <Color x:Key="MutedColor">#FF6F7D7F</Color>
     <Color x:Key="LineColor">#FFE5E9E6</Color>
+    <Color x:Key="WindowEdgeColor">#FFD3DCD7</Color>
     <Color x:Key="CanvasColor">#FFFFFFFF</Color>
     <Color x:Key="PanelColor">#FFFFFFFF</Color>
     <Color x:Key="ChromeColor">#FFEDF5F1</Color>
@@ -16,6 +17,7 @@
     <SolidColorBrush x:Key="InkBrush" Color="{StaticResource InkColor}" />
     <SolidColorBrush x:Key="MutedBrush" Color="{StaticResource MutedColor}" />
     <SolidColorBrush x:Key="LineBrush" Color="{StaticResource LineColor}" />
+    <SolidColorBrush x:Key="WindowEdgeBrush" Color="{StaticResource WindowEdgeColor}" />
     <SolidColorBrush x:Key="CanvasBrush" Color="{StaticResource CanvasColor}" />
     <SolidColorBrush x:Key="PanelBrush" Color="{StaticResource PanelColor}" />
     <SolidColorBrush x:Key="ChromeBrush" Color="{StaticResource ChromeColor}" />
@@ -229,6 +231,56 @@
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Surface" Property="Background" Value="#22FFFFFF" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="ToggleSwitchStyle" TargetType="{x:Type CheckBox}">
+        <Setter Property="Width" Value="40" />
+        <Setter Property="Height" Value="22" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type CheckBox}">
+                    <Grid
+                        x:Name="Root"
+                        Width="40"
+                        Height="22"
+                        Background="Transparent">
+                        <Border
+                            x:Name="Track"
+                            Background="#FFDCE4E0"
+                            BorderBrush="#FFD2DCD7"
+                            BorderThickness="1"
+                            CornerRadius="11">
+                            <Ellipse
+                                x:Name="Thumb"
+                                Width="16"
+                                Height="16"
+                                Margin="2"
+                                HorizontalAlignment="Left"
+                                Fill="#FFFFFFFF" />
+                        </Border>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Track" Property="Background" Value="{StaticResource SeaBrush}" />
+                            <Setter TargetName="Track" Property="BorderBrush" Value="{StaticResource SeaBrush}" />
+                            <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right" />
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Root" Property="Opacity" Value="0.88" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Track" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Root" Property="Opacity" Value="0.45" />
+                            <Setter Property="Cursor" Value="Arrow" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

@@ -14,6 +14,19 @@ internal static class NativeMethods
     internal const uint ModNoRepeat = 0x4000;
     internal const uint VkF4 = 0x73;
     internal const uint MonitorDefaultToNearest = 0x00000002;
+    internal const uint EventSystemForeground = 0x0003;
+    internal const uint WineventOutOfContext = 0x0000;
+    internal const uint WineventSkipOwnProcess = 0x0002;
+
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+    internal delegate void WinEventDelegate(
+        IntPtr hook,
+        uint eventType,
+        IntPtr window,
+        int objectId,
+        int childId,
+        uint eventThread,
+        uint eventTime);
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -43,6 +56,20 @@ internal static class NativeMethods
 
     [DllImport("user32.dll", SetLastError = true)]
     internal static extern uint GetClipboardSequenceNumber();
+
+    [DllImport("user32.dll", SetLastError = true)]
+    internal static extern IntPtr SetWinEventHook(
+        uint eventMin,
+        uint eventMax,
+        IntPtr module,
+        WinEventDelegate callback,
+        uint processId,
+        uint threadId,
+        uint flags);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool UnhookWinEvent(IntPtr hook);
 
     [DllImport("user32.dll", EntryPoint = "GetWindowLongW", SetLastError = true)]
     private static extern int GetWindowLong32(IntPtr hwnd, int index);

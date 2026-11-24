@@ -741,13 +741,8 @@ public partial class MainWindow : Window, IDisposable
 
     private void MoreButton_Click(object sender, RoutedEventArgs eventArgs)
     {
-        if (sender is FrameworkElement { ContextMenu: not null } element)
-        {
-            element.ContextMenu.PlacementTarget = element;
-            element.ContextMenu.Placement = PlacementMode.Bottom;
-            element.ContextMenu.IsOpen = true;
-            eventArgs.Handled = true;
-        }
+        ShowSettings();
+        eventArgs.Handled = true;
     }
 
     public void ShowSettings()
@@ -755,7 +750,8 @@ public partial class MainWindow : Window, IDisposable
         var dialog = new SettingsWindow(
             _settings.CardTextLimit,
             _settings.CardFontSize,
-            _hotKeyService.CurrentHotKey);
+            _hotKeyService.CurrentHotKey,
+            _settings.HideAfterCopy);
         if (IsVisible)
         {
             dialog.Owner = this;
@@ -765,15 +761,28 @@ public partial class MainWindow : Window, IDisposable
             dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
         }
 
-        if (dialog.ShowDialog() != true)
+        _hotKeyService.Suspend();
+        var accepted = false;
+        try
+        {
+            accepted = dialog.ShowDialog() == true;
+        }
+        finally
+        {
+            if (!accepted)
+            {
+                _hotKeyAvailable = _hotKeyService.Resume();
+                UpdateHotKeyUi();
+            }
+        }
+
+        if (!accepted)
         {
             return;
         }
 
         var requestedHotKey = dialog.HotKey;
-        var hotKeyUpdated =
-            (requestedHotKey.Equals(_hotKeyService.CurrentHotKey) && _hotKeyAvailable)
-            || _hotKeyService.UpdateHotKey(requestedHotKey);
+        var hotKeyUpdated = _hotKeyService.UpdateHotKey(requestedHotKey);
         if (!hotKeyUpdated)
         {
             _hotKeyAvailable = false;
@@ -787,6 +796,7 @@ public partial class MainWindow : Window, IDisposable
 
         _settings.CardTextLimit = dialog.CardTextLimit;
         _settings.CardFontSize = dialog.CardFontSize;
+        _settings.HideAfterCopy = dialog.HideAfterCopy;
         _viewModel.ApplyDisplaySettings(
             _settings.CardTextLimit,
             _settings.CardFontSize);
@@ -804,41 +814,15 @@ public partial class MainWindow : Window, IDisposable
         }
     }
 
-    private void SettingsMenuItem_Click(object sender, RoutedEventArgs eventArgs)
-    {
-        ShowSettings();
-    }
-
-    private async void AutoHideMenuItem_Click(object sender, RoutedEventArgs eventArgs)
-    {
-        _settings.HideAfterCopy = !_settings.HideAfterCopy;
-        AutoHideMenuItem.IsChecked = _settings.HideAfterCopy;
-        await SaveSettingsAsync();
-        ShowToast(
-            _settings.HideAfterCopy ? "复制后自动隐藏已开启" : "复制后自动隐藏已关闭",
-            false);
-    }
-
-    private void ClearHistoryMenuItem_Click(object sender, RoutedEventArgs eventArgs)
-    {
-        if (ConfirmWindow.ConfirmClearHistory(this))
-        {
-            _viewModel.ClearHistory();
-        }
-    }
-
     private void UpdateHotKeyUi()
     {
-        HotKeyStatusMenuItem.Header = _hotKeyAvailable ? "快捷键已启用" : "快捷键冲突，请重新设置";
-        HotKeyStatusMenuItem.IsEnabled = false;
         HotKeyConflictDot.Visibility = _hotKeyAvailable
             ? Visibility.Collapsed
             : Visibility.Visible;
         HideButton.ToolTip = $"隐藏 ({_hotKeyService.CurrentHotKey.DisplayText})";
         MoreButton.ToolTip = _hotKeyAvailable
-            ? "更多操作"
-            : "更多操作 · 快捷键冲突";
-        AutoHideMenuItem.IsChecked = _settings.HideAfterCopy;
+            ? "设置"
+            : "设置 · 快捷键冲突";
     }
 
     private async Task SaveSettingsAsync()

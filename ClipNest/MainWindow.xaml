@@ -4,6 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="clr-namespace:ClipNest.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:infrastructure="clr-namespace:ClipNest.Infrastructure"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     Title="ClipNest"
     Width="450"
@@ -33,11 +34,12 @@
             x:Name="WindowSurface"
             Margin="6"
             Background="{StaticResource PanelBrush}"
-            BorderBrush="{StaticResource LineBrush}"
+            BorderBrush="{StaticResource WindowEdgeBrush}"
             BorderThickness="1"
             CornerRadius="12"
+            SnapsToDevicePixels="True"
             MouseLeftButtonDown="Root_MouseLeftButtonDown">
-            <Grid>
+            <Grid infrastructure:RoundedClip.BottomRadius="11">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="42" />
                     <RowDefinition Height="Auto" />
@@ -82,42 +84,16 @@
                                 x:Name="MoreButton"
                                 Width="26"
                                 Height="26"
-                                AutomationProperties.Name="更多操作"
+                                AutomationProperties.Name="设置"
                                 Click="MoreButton_Click"
                                 Style="{StaticResource IconButtonStyle}"
-                                ToolTip="更多操作">
+                                ToolTip="设置">
                                 <Path
                                     Width="14"
                                     Height="14"
                                     Data="M3,8 L3.1,8 M8,8 L8.1,8 M13,8 L13.1,8"
                                     Style="{StaticResource IconPathStyle}"
                                     StrokeThickness="3" />
-                                <Button.ContextMenu>
-                                    <ContextMenu Style="{StaticResource ClipContextMenuStyle}">
-                                        <MenuItem
-                                            x:Name="HotKeyStatusMenuItem"
-                                            Header="快捷键已启用"
-                                            Style="{StaticResource ClipMenuItemStyle}" />
-                                        <MenuItem
-                                            x:Name="SettingsMenuItem"
-                                            Click="SettingsMenuItem_Click"
-                                            Header="设置..."
-                                            Style="{StaticResource ClipMenuItemStyle}" />
-                                        <MenuItem
-                                            x:Name="AutoHideMenuItem"
-                                            Click="AutoHideMenuItem_Click"
-                                            Header="复制后自动隐藏"
-                                            IsCheckable="True"
-                                            Style="{StaticResource ClipMenuItemStyle}" />
-                                        <Separator />
-                                        <MenuItem
-                                            x:Name="ClearHistoryMenuItem"
-                                            Click="ClearHistoryMenuItem_Click"
-                                            Header="清空历史"
-                                            IsEnabled="{Binding HasItems}"
-                                            Style="{StaticResource DangerClipMenuItemStyle}" />
-                                    </ContextMenu>
-                                </Button.ContextMenu>
                             </Button>
                             <Ellipse
                                 x:Name="HotKeyConflictDot"
@@ -245,7 +221,7 @@
                     </Grid>
                 </Border>
 
-                <Grid Grid.Row="2" Background="{StaticResource PanelBrush}">
+                <Grid Grid.Row="2">
                     <ScrollViewer
                         x:Name="HistoryScrollViewer"
                         Padding="2,1,1,1"
@@ -307,7 +283,6 @@
 
                                             <Grid
                                                 x:Name="TextLayout"
-                                                MinHeight="48"
                                                 Margin="14,4,10,4">
                                                 <TextBlock
                                                     MaxHeight="114"
@@ -635,7 +610,7 @@
             Panel.ZIndex="35"
             Width="19"
             Height="19"
-            Margin="0,0,3,3"
+            Margin="0,0,7,7"
             HorizontalAlignment="Right"
             VerticalAlignment="Bottom"
             Cursor="SizeNWSE"

@@ -1,4 +1,5 @@
 using ClipNest.Models;
+using System.Windows.Input;
 
 namespace ClipNest.Tests;
 
@@ -58,5 +59,19 @@ public sealed class AppSettingsTests
         bool expected)
     {
         Assert.Equal(expected, HotKeyDefinition.IsValid(modifiers, virtualKey));
+    }
+
+    [Theory]
+    [InlineData(0x73u)]
+    [InlineData(0x77u)]
+    public void HotKeyDefinition_AcceptsBareFunctionKeys(uint virtualKey)
+    {
+        var key = KeyInterop.KeyFromVirtualKey((int)virtualKey);
+
+        var hotKey = HotKeyDefinition.FromKeyboard(key, ModifierKeys.None);
+
+        Assert.NotNull(hotKey);
+        Assert.Equal(virtualKey, hotKey.VirtualKey);
+        Assert.Equal(0u, hotKey.Modifiers);
     }
 }

@@ -79,6 +79,33 @@ public sealed class HotKeyService : IDisposable
         return false;
     }
 
+    public void Suspend()
+    {
+        if (!_registered || _windowHandle == IntPtr.Zero)
+        {
+            return;
+        }
+
+        NativeMethods.UnregisterHotKey(_windowHandle, HotKeyId);
+        _registered = false;
+    }
+
+    public bool Resume()
+    {
+        if (_windowHandle == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        if (_registered)
+        {
+            return true;
+        }
+
+        _registered = TryRegister(_hotKey);
+        return _registered;
+    }
+
     private bool TryRegister(HotKeyDefinition hotKey)
     {
         return NativeMethods.RegisterHotKey(

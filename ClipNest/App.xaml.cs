@@ -1,7 +1,10 @@
 using System.IO;
 using System.Threading;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Threading;
+using ClipNest.Infrastructure;
 using ClipNest.Services;
 using ClipNest.ViewModels;
 using Drawing = System.Drawing;
@@ -21,11 +24,13 @@ public partial class App : System.Windows.Application, IDisposable
     private CancellationTokenSource? _activationCancellation;
     private MainWindow? _mainWindow;
     private Forms.NotifyIcon? _trayIcon;
-    private Forms.ContextMenuStrip? _trayMenu;
+    private ContextMenu? _trayContextMenu;
     private Drawing.Icon? _trayDrawingIcon;
-    private Forms.ToolStripMenuItem? _showHideMenuItem;
-    private Forms.ToolStripMenuItem? _settingsMenuItem;
-    private Forms.ToolStripMenuItem? _clearHistoryMenuItem;
+    private MenuItem? _showHideMenuItem;
+    private MenuItem? _settingsMenuItem;
+    private MenuItem? _clearHistoryMenuItem;
+    private NativeMethods.WinEventDelegate? _trayMenuForegroundChangedHandler;
+    private IntPtr _trayMenuForegroundHook;
     private HistoryStore? _historyStore;
     private MainViewModel? _viewModel;
     private bool _isShuttingDown;
@@ -124,8 +129,13 @@ public partial class App : System.Windows.Application, IDisposable
             _trayIcon = null;
         }
 
-        _trayMenu?.Dispose();
-        _trayMenu = null;
+        if (_trayContextMenu is not null)
+        {
+            _trayContextMenu.IsOpen = false;
+            _trayContextMenu = null;
+        }
+
+        StopTrayMenuForegroundMonitor();
         _trayDrawingIcon?.Dispose();
         _trayDrawingIcon = null;
         _mainWindow?.Dispose();
@@ -228,226 +238,127 @@ public partial class App : System.Windows.Application, IDisposable
         using var iconStream = iconResource.Stream;
         _trayDrawingIcon = new Drawing.Icon(iconStream);
 
-        _trayMenu = new ClipNestTrayMenu();
-
-        _showHideMenuItem = CreateTrayMenuItem("隐藏 ClipNest");
+        _trayContextMenu = CreateTrayContextMenu();
+        _showHideMenuItem = CreateTrayMenuItem("隐藏");
         _showHideMenuItem.Click += (_, _) => ToggleWindowFromTray();
-        _settingsMenuItem = CreateTrayMenuItem("设置...");
+        _settingsMenuItem = CreateTrayMenuItem("设置");
         _settingsMenuItem.Click += (_, _) => OpenSettingsFromTray();
         _clearHistoryMenuItem = CreateTrayMenuItem("清空历史");
         _clearHistoryMenuItem.Click += (_, _) => ClearHistoryFromTray();
         var exitMenuItem = CreateTrayMenuItem("退出");
         exitMenuItem.Click += async (_, _) => await ExitApplicationAsync();
 
-        _trayMenu.Items.Add(_showHideMenuItem);
-        _trayMenu.Items.Add(_settingsMenuItem);
-        _trayMenu.Items.Add(_clearHistoryMenuItem);
-        _trayMenu.Items.Add(new Forms.ToolStripSeparator
+        _trayContextMenu.Items.Add(_showHideMenuItem);
+        _trayContextMenu.Items.Add(_settingsMenuItem);
+        _trayContextMenu.Items.Add(_clearHistoryMenuItem);
+        _trayContextMenu.Items.Add(new Separator());
+        _trayContextMenu.Items.Add(exitMenuItem);
+        _trayContextMenu.Opened += (_, _) =>
         {
-            Margin = new Forms.Padding(5, 3, 5, 3)
-        });
-        _trayMenu.Items.Add(exitMenuItem);
-        _trayMenu.Opening += (_, _) => UpdateTrayMenuState();
+            UpdateTrayMenuState();
+            StartTrayMenuForegroundMonitor();
+        };
+        _trayContextMenu.Closed += (_, _) => StopTrayMenuForegroundMonitor();
 
         _trayIcon = new Forms.NotifyIcon
         {
             Icon = _trayDrawingIcon,
             Text = "ClipNest",
-            Visible = true,
-            ContextMenuStrip = _trayMenu
+            Visible = true
         };
-        _trayIcon.MouseClick += (_, eventArgs) =>
+        _trayIcon.MouseUp += (_, eventArgs) =>
         {
             if (eventArgs.Button == Forms.MouseButtons.Left)
             {
                 ToggleWindowFromTray();
             }
+            else if (eventArgs.Button == Forms.MouseButtons.Right)
+            {
+                Dispatcher.BeginInvoke(new Action(ShowTrayContextMenu));
+            }
         };
     }
 
-    private static Forms.ToolStripMenuItem CreateTrayMenuItem(string text)
+    private ContextMenu CreateTrayContextMenu()
     {
-        return new Forms.ToolStripMenuItem(text)
+        return new ContextMenu
         {
-            AutoSize = true,
-            Padding = new Forms.Padding(11, 7, 11, 7),
-            Margin = Forms.Padding.Empty,
-            TextAlign = Drawing.ContentAlignment.MiddleCenter
+            Placement = PlacementMode.MousePoint,
+            StaysOpen = false,
+            Style = (Style)FindResource("ClipContextMenuStyle")
         };
     }
 
-    private static Drawing.Drawing2D.GraphicsPath CreateRoundedRectangle(
-        Drawing.Rectangle bounds,
-        int radius)
+    private MenuItem CreateTrayMenuItem(string header)
     {
-        var diameter = Math.Max(1, radius * 2);
-        var path = new Drawing.Drawing2D.GraphicsPath();
-        path.AddArc(bounds.Left, bounds.Top, diameter, diameter, 180, 90);
-        path.AddArc(bounds.Right - diameter, bounds.Top, diameter, diameter, 270, 90);
-        path.AddArc(
-            bounds.Right - diameter,
-            bounds.Bottom - diameter,
-            diameter,
-            diameter,
+        return new MenuItem
+        {
+            Header = header,
+            Style = (Style)FindResource("ClipMenuItemStyle")
+        };
+    }
+
+    private void ShowTrayContextMenu()
+    {
+        if (_trayContextMenu is null)
+        {
+            return;
+        }
+
+        UpdateTrayMenuState();
+        _trayContextMenu.IsOpen = true;
+    }
+
+    private void StartTrayMenuForegroundMonitor()
+    {
+        if (_trayMenuForegroundHook != IntPtr.Zero)
+        {
+            return;
+        }
+
+        _trayMenuForegroundChangedHandler ??= TrayMenuForegroundChanged;
+        _trayMenuForegroundHook = NativeMethods.SetWinEventHook(
+            NativeMethods.EventSystemForeground,
+            NativeMethods.EventSystemForeground,
+            IntPtr.Zero,
+            _trayMenuForegroundChangedHandler,
             0,
-            90);
-        path.AddArc(bounds.Left, bounds.Bottom - diameter, diameter, diameter, 90, 90);
-        path.CloseFigure();
-        return path;
+            0,
+            NativeMethods.WineventOutOfContext | NativeMethods.WineventSkipOwnProcess);
     }
 
-    private sealed class ClipNestTrayMenu : Forms.ContextMenuStrip
+    private void StopTrayMenuForegroundMonitor()
     {
-        public ClipNestTrayMenu()
+        if (_trayMenuForegroundHook == IntPtr.Zero)
         {
-            ShowImageMargin = false;
-            ShowCheckMargin = false;
-            Font = new Drawing.Font("Microsoft YaHei UI", 10.5f);
-            BackColor = Drawing.Color.White;
-            ForeColor = Drawing.Color.FromArgb(29, 40, 42);
-            MinimumSize = new Drawing.Size(190, 0);
-            Padding = new Forms.Padding(5, 4, 5, 4);
-            DropShadowEnabled = true;
-            Renderer = new ClipNestTrayMenuRenderer();
+            return;
         }
 
-        protected override void OnHandleCreated(EventArgs eventArgs)
-        {
-            base.OnHandleCreated(eventArgs);
-            UpdateRoundedRegion();
-        }
-
-        protected override void OnSizeChanged(EventArgs eventArgs)
-        {
-            base.OnSizeChanged(eventArgs);
-            UpdateRoundedRegion();
-        }
-
-        private void UpdateRoundedRegion()
-        {
-            if (Width <= 1 || Height <= 1)
-            {
-                return;
-            }
-
-            using var path = CreateRoundedRectangle(
-                new Drawing.Rectangle(0, 0, Width, Height),
-                radius: 9);
-            var previous = Region;
-            Region = new Drawing.Region(path);
-            previous?.Dispose();
-        }
+        NativeMethods.UnhookWinEvent(_trayMenuForegroundHook);
+        _trayMenuForegroundHook = IntPtr.Zero;
     }
 
-    private sealed class ClipNestTrayMenuRenderer : Forms.ToolStripProfessionalRenderer
+    private void TrayMenuForegroundChanged(
+        IntPtr hook,
+        uint eventType,
+        IntPtr window,
+        int objectId,
+        int childId,
+        uint eventThread,
+        uint eventTime)
     {
-        private static readonly Drawing.Color Highlight =
-            Drawing.Color.FromArgb(229, 242, 237);
-        private static readonly Drawing.Color Border =
-            Drawing.Color.FromArgb(229, 233, 230);
-
-        public ClipNestTrayMenuRenderer()
-            : base(new TrayMenuColorTable())
+        if (Dispatcher.HasShutdownStarted)
         {
-            RoundedEdges = false;
+            return;
         }
 
-        protected override void OnRenderToolStripBackground(
-            Forms.ToolStripRenderEventArgs e)
+        Dispatcher.BeginInvoke(DispatcherPriority.Send, new Action(() =>
         {
-            using var brush = new Drawing.SolidBrush(Drawing.Color.White);
-            e.Graphics.FillRectangle(brush, e.ToolStrip.ClientRectangle);
-        }
-
-        protected override void OnRenderToolStripBorder(
-            Forms.ToolStripRenderEventArgs e)
-        {
-            if (e.ToolStrip.Width < 4 || e.ToolStrip.Height < 4)
+            if (_trayContextMenu is { IsOpen: true })
             {
-                return;
+                _trayContextMenu.IsOpen = false;
             }
-
-            using var path = CreateRoundedRectangle(
-                new Drawing.Rectangle(
-                    1,
-                    1,
-                    e.ToolStrip.Width - 3,
-                    e.ToolStrip.Height - 3),
-                radius: 8);
-            using var pen = new Drawing.Pen(Border);
-            e.Graphics.DrawPath(pen, path);
-        }
-
-        protected override void OnRenderMenuItemBackground(Forms.ToolStripItemRenderEventArgs e)
-        {
-            var bounds = new Drawing.Rectangle(
-                3,
-                1,
-                Math.Max(1, e.Item.Width - 6),
-                Math.Max(1, e.Item.Height - 2));
-            if (!e.Item.Selected)
-            {
-                using var background = new Drawing.SolidBrush(Drawing.Color.White);
-                e.Graphics.FillRectangle(background, bounds);
-                return;
-            }
-
-            using var path = CreateRoundedRectangle(bounds, radius: 5);
-            using var highlight = new Drawing.SolidBrush(Highlight);
-            e.Graphics.FillPath(highlight, path);
-        }
-
-        protected override void OnRenderSeparator(
-            Forms.ToolStripSeparatorRenderEventArgs e)
-        {
-            var y = e.Item.Height / 2;
-            using var pen = new Drawing.Pen(Border);
-            e.Graphics.DrawLine(pen, 10, y, Math.Max(10, e.Item.Width - 10), y);
-        }
-
-        protected override void OnRenderItemText(Forms.ToolStripItemTextRenderEventArgs e)
-        {
-            e.TextColor = e.Item.Enabled
-                ? Drawing.Color.FromArgb(29, 40, 42)
-                : Drawing.Color.FromArgb(111, 125, 127);
-            e.TextRectangle = new Drawing.Rectangle(
-                0,
-                0,
-                e.ToolStrip.ClientSize.Width,
-                e.Item.Height);
-            e.TextFormat = Forms.TextFormatFlags.HorizontalCenter
-                | Forms.TextFormatFlags.VerticalCenter
-                | Forms.TextFormatFlags.SingleLine
-                | Forms.TextFormatFlags.NoPrefix;
-            base.OnRenderItemText(e);
-        }
-    }
-
-    private sealed class TrayMenuColorTable : Forms.ProfessionalColorTable
-    {
-        public override Drawing.Color ToolStripDropDownBackground => Drawing.Color.White;
-
-        public override Drawing.Color MenuItemSelected => Drawing.Color.FromArgb(229, 242, 237);
-
-        public override Drawing.Color MenuItemSelectedGradientBegin =>
-            Drawing.Color.FromArgb(229, 242, 237);
-
-        public override Drawing.Color MenuItemSelectedGradientEnd =>
-            Drawing.Color.FromArgb(229, 242, 237);
-
-        public override Drawing.Color MenuItemBorder => Drawing.Color.Transparent;
-
-        public override Drawing.Color MenuBorder => Drawing.Color.Transparent;
-
-        public override Drawing.Color SeparatorDark => Drawing.Color.FromArgb(229, 233, 230);
-
-        public override Drawing.Color SeparatorLight => Drawing.Color.FromArgb(229, 233, 230);
-
-        public override Drawing.Color ImageMarginGradientBegin => Drawing.Color.White;
-
-        public override Drawing.Color ImageMarginGradientMiddle => Drawing.Color.White;
-
-        public override Drawing.Color ImageMarginGradientEnd => Drawing.Color.White;
+        }));
     }
 
     private void UpdateTrayMenuState()
@@ -457,8 +368,8 @@ public partial class App : System.Windows.Application, IDisposable
             return;
         }
 
-        _showHideMenuItem.Text = _mainWindow.IsVisible ? "隐藏 ClipNest" : "显示 ClipNest";
-        _clearHistoryMenuItem!.Enabled = _viewModel?.Items.Count > 0;
+        _showHideMenuItem.Header = _mainWindow.IsVisible ? "隐藏" : "显示";
+        _clearHistoryMenuItem!.IsEnabled = _viewModel?.Items.Count > 0;
         if (_trayIcon is not null)
         {
             _trayIcon.Text = $"ClipNest · {_mainWindow.HotKeyDisplayText} 显示或隐藏";
