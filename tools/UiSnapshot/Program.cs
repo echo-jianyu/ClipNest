@@ -49,8 +49,7 @@ internal static class Program
         {
             var confirmWindow = new ConfirmWindow(
                 "清空历史",
-                "确定清空全部粘贴板记录吗？",
-                "此操作会删除所有文字和图片记录，且无法撤销。",
+                "此操作会去清空所有文字和图片记录，无法撤销，确定清空吗？",
                 "清空历史");
             RenderWindowContent(confirmWindow, outputPath);
             application.Shutdown();

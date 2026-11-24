@@ -7,14 +7,12 @@ public partial class ConfirmWindow : Window
 {
     public ConfirmWindow(
         string title,
-        string message,
         string detail,
         string confirmText)
     {
         InitializeComponent();
         Title = title;
         TitleText.Text = title;
-        MessageText.Text = message;
         DetailText.Text = detail;
         ConfirmButton.Content = confirmText;
     }
@@ -23,8 +21,7 @@ public partial class ConfirmWindow : Window
     {
         var dialog = new ConfirmWindow(
             "清空历史",
-            "确定清空全部粘贴板记录吗？",
-            "此操作会删除所有文字和图片记录，且无法撤销。",
+            "此操作会去清空所有文字和图片记录，无法撤销，确定清空吗？",
             "清空历史");
         if (owner is not null)
         {

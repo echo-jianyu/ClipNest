@@ -95,15 +95,23 @@
                                     Style="{StaticResource IconPathStyle}"
                                     StrokeThickness="3" />
                             </Button>
-                            <Ellipse
-                                x:Name="HotKeyConflictDot"
-                                Width="6"
-                                Height="6"
-                                Margin="0,3,3,0"
+                            <Path
+                                x:Name="HotKeyConflictIndicator"
+                                Width="12"
+                                Height="12"
+                                Margin="0,2,2,0"
                                 HorizontalAlignment="Right"
                                 VerticalAlignment="Top"
-                                Fill="{StaticResource AccentBrush}"
-                                IsHitTestVisible="False"
+                                AutomationProperties.Name="全局快捷键冲突"
+                                Data="M6,1 L11,10.5 L1,10.5 Z M6,4 L6,7.2 M6,8.5 L6.1,8.5"
+                                Fill="{StaticResource AccentSoftBrush}"
+                                Stretch="Uniform"
+                                Stroke="{StaticResource AccentBrush}"
+                                StrokeEndLineCap="Round"
+                                StrokeLineJoin="Round"
+                                StrokeStartLineCap="Round"
+                                StrokeThickness="1.2"
+                                ToolTip="全局快捷键冲突，点击设置重新设置"
                                 Visibility="Collapsed" />
                         </Grid>
 

@@ -26,6 +26,7 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
@@ -52,20 +53,16 @@
                         StrokeStartLineCap="Round"
                         StrokeThickness="1.7" />
                 </Border>
-                <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                <StackPanel
+                    Grid.Column="1"
+                    Margin="12,0,0,0"
+                    VerticalAlignment="Center">
                     <TextBlock
                         x:Name="TitleText"
                         FontSize="15.5"
                         FontWeight="SemiBold"
                         Foreground="{StaticResource InkBrush}"
                         Text="清空历史" />
-                    <TextBlock
-                        x:Name="MessageText"
-                        Margin="0,7,0,0"
-                        FontSize="12.5"
-                        Foreground="{StaticResource InkBrush}"
-                        Text="确定清空全部粘贴板记录吗？"
-                        TextWrapping="Wrap" />
                 </StackPanel>
             </Grid>
 
@@ -86,7 +83,7 @@
             </Border>
 
             <StackPanel
-                Grid.Row="2"
+                Grid.Row="3"
                 HorizontalAlignment="Right"
                 Orientation="Horizontal">
                 <Button
