@@ -5,6 +5,7 @@
     <Color x:Key="InkColor">#FF1D282A</Color>
     <Color x:Key="MutedColor">#FF6F7D7F</Color>
     <Color x:Key="LineColor">#FFE5E9E6</Color>
+    <Color x:Key="WindowEdgeColor">#FFD1DAD5</Color>
     <Color x:Key="CanvasColor">#FFFFFFFF</Color>
     <Color x:Key="PanelColor">#FFFFFFFF</Color>
     <Color x:Key="ChromeColor">#FFEDF5F1</Color>
@@ -16,6 +17,7 @@
     <SolidColorBrush x:Key="InkBrush" Color="{StaticResource InkColor}" />
     <SolidColorBrush x:Key="MutedBrush" Color="{StaticResource MutedColor}" />
     <SolidColorBrush x:Key="LineBrush" Color="{StaticResource LineColor}" />
+    <SolidColorBrush x:Key="WindowEdgeBrush" Color="{StaticResource WindowEdgeColor}" />
     <SolidColorBrush x:Key="CanvasBrush" Color="{StaticResource CanvasColor}" />
     <SolidColorBrush x:Key="PanelBrush" Color="{StaticResource PanelColor}" />
     <SolidColorBrush x:Key="ChromeBrush" Color="{StaticResource ChromeColor}" />
