@@ -18,6 +18,8 @@ public sealed class HotKeyService : IDisposable
 
     public HotKeyDefinition CurrentHotKey => _hotKey;
 
+    public bool IsRegistered => _registered;
+
     public bool Attach(Window window, HotKeyDefinition hotKey)
     {
         if (window is null)

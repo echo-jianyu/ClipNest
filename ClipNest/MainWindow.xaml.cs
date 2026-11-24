@@ -783,13 +783,9 @@ public partial class MainWindow : Window, IDisposable
 
         var requestedHotKey = dialog.HotKey;
         var hotKeyUpdated = _hotKeyService.UpdateHotKey(requestedHotKey);
-        if (!hotKeyUpdated)
+        _hotKeyAvailable = _hotKeyService.IsRegistered;
+        if (hotKeyUpdated)
         {
-            _hotKeyAvailable = false;
-        }
-        else
-        {
-            _hotKeyAvailable = true;
             _settings.HotKeyModifiers = requestedHotKey.Modifiers;
             _settings.HotKeyKey = requestedHotKey.VirtualKey;
         }
@@ -809,7 +805,8 @@ public partial class MainWindow : Window, IDisposable
         else
         {
             ShowToast(
-                $"{requestedHotKey.DisplayText} 已被占用，其他设置已保存",
+                $"{requestedHotKey.DisplayText} 已被占用，仍使用 " +
+                $"{_hotKeyService.CurrentHotKey.DisplayText}，其他设置已保存",
                 false);
         }
     }
