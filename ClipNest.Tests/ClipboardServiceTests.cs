@@ -88,6 +88,30 @@ public sealed class ClipboardServiceTests
             EncodePng(2, 2, pixels)));
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void IsUsableClipboardBitmap_DependsOnPixelVisibility(
+        bool useTransparentPixels)
+    {
+        var pixels = new byte[2 * 2 * 4];
+        if (!useTransparentPixels)
+        {
+            for (var index = 0; index < pixels.Length; index += 4)
+            {
+                pixels[index] = 20;
+                pixels[index + 1] = 120;
+                pixels[index + 2] = 110;
+            }
+        }
+
+        var bitmap = DecodePng(EncodePng(2, 2, pixels));
+
+        Assert.Equal(
+            !useTransparentPixels,
+            ClipboardService.IsUsableClipboardBitmap(bitmap));
+    }
+
     [Fact]
     public void NormalizeImage_RepairsZeroAlphaClipboardBitmap()
     {

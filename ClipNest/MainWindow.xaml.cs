@@ -26,6 +26,7 @@ public partial class MainWindow : Window, IDisposable
     private readonly HotKeyService _hotKeyService;
     private readonly HistoryStore _historyStore;
     private readonly SettingsStore _settingsStore;
+    private readonly AutoStartService _autoStartService;
     private readonly AppSettings _settings;
     private readonly DispatcherTimer _historySaveTimer;
     private readonly DispatcherTimer _placementSaveTimer;
@@ -49,12 +50,14 @@ public partial class MainWindow : Window, IDisposable
         IClipboardService clipboardService,
         HistoryStore historyStore,
         SettingsStore settingsStore,
+        AutoStartService autoStartService,
         AppSettings settings)
     {
         _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
         _clipboardService = clipboardService ?? throw new ArgumentNullException(nameof(clipboardService));
         _historyStore = historyStore ?? throw new ArgumentNullException(nameof(historyStore));
         _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
+        _autoStartService = autoStartService ?? throw new ArgumentNullException(nameof(autoStartService));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _hotKey = HotKeyDefinition.FromSettings(_settings);
         _hotKeyService = new HotKeyService();
@@ -587,11 +590,6 @@ public partial class MainWindow : Window, IDisposable
         return SystemParameters.WorkArea;
     }
 
-    private void HideButton_Click(object sender, RoutedEventArgs eventArgs)
-    {
-        HideToTray();
-    }
-
     private void ClipItem_MouseLeftButtonDown(object sender, MouseButtonEventArgs eventArgs)
     {
         if (sender is not FrameworkElement { DataContext: ClipItem item }
@@ -755,7 +753,8 @@ public partial class MainWindow : Window, IDisposable
             _settings.CardTextLimit,
             _settings.CardFontSize,
             _hotKeyService.CurrentHotKey,
-            _settings.HideAfterCopy);
+            _settings.HideAfterCopy,
+            _settings.AutoStartOnLogin);
         if (IsVisible)
         {
             dialog.Owner = this;
@@ -794,6 +793,14 @@ public partial class MainWindow : Window, IDisposable
             _settings.HotKeyKey = requestedHotKey.VirtualKey;
         }
 
+        var autoStartUpdated = _autoStartService.TrySetEnabled(
+            dialog.AutoStartOnLogin,
+            out _);
+        if (autoStartUpdated)
+        {
+            _settings.AutoStartOnLogin = dialog.AutoStartOnLogin;
+        }
+
         _settings.CardTextLimit = dialog.CardTextLimit;
         _settings.CardFontSize = dialog.CardFontSize;
         _settings.HideAfterCopy = dialog.HideAfterCopy;
@@ -802,16 +809,26 @@ public partial class MainWindow : Window, IDisposable
             _settings.CardFontSize);
         _ = SaveSettingsAsync();
         UpdateHotKeyUi();
+        var notices = new List<string>();
+        if (!autoStartUpdated)
+        {
+            notices.Add("开机自启动设置失败，其他设置已保存");
+        }
+
         if (hotKeyUpdated)
         {
             HotKeyChanged?.Invoke(this, EventArgs.Empty);
         }
         else
         {
-            ShowToast(
+            notices.Add(
                 $"{requestedHotKey.DisplayText} 已被占用，仍使用 " +
-                $"{_hotKeyService.CurrentHotKey.DisplayText}，其他设置已保存",
-                false);
+                $"{_hotKeyService.CurrentHotKey.DisplayText}，其他设置已保存");
+        }
+
+        if (notices.Count > 0)
+        {
+            ShowToast(string.Join(" ", notices), false);
         }
     }
 
@@ -820,7 +837,6 @@ public partial class MainWindow : Window, IDisposable
         HotKeyConflictDot.Visibility = _hotKeyAvailable
             ? Visibility.Collapsed
             : Visibility.Visible;
-        HideButton.ToolTip = $"隐藏 ({_hotKeyService.CurrentHotKey.DisplayText})";
         MoreButton.ToolTip = _hotKeyAvailable
             ? "菜单"
             : "菜单 · 快捷键冲突";

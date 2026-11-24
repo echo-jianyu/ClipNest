@@ -37,6 +37,7 @@ public sealed class SettingsStoreTests
             Assert.False(settings.HideAfterCopy);
             Assert.Equal(40, settings.CardTextLimit);
             Assert.Equal(13.5, settings.CardFontSize);
+            Assert.True(settings.AutoStartOnLogin);
         }
         finally
         {
@@ -62,7 +63,8 @@ public sealed class SettingsStoreTests
                 HotKeyKey = 0x56,
                 HideAfterCopy = true,
                 CardTextLimit = 72,
-                CardFontSize = 15
+                CardFontSize = 15,
+                AutoStartOnLogin = false
             });
 
             var settings = await store.LoadAsync();
@@ -76,6 +78,7 @@ public sealed class SettingsStoreTests
             Assert.True(settings.HideAfterCopy);
             Assert.Equal(72, settings.CardTextLimit);
             Assert.Equal(15, settings.CardFontSize);
+            Assert.False(settings.AutoStartOnLogin);
         }
         finally
         {

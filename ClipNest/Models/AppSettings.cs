@@ -14,6 +14,8 @@ public sealed class AppSettings
     public const double MinimumCardFontSize = 11;
     public const double MaximumCardFontSize = 20;
 
+    private bool? _autoStartOnLogin = true;
+
     [DataMember(Name = "width", Order = 0)]
     public double Width { get; set; } = DefaultWidth;
 
@@ -40,6 +42,20 @@ public sealed class AppSettings
 
     [DataMember(Name = "cardFontSize", Order = 8)]
     public double CardFontSize { get; set; } = 13.5;
+
+    [DataMember(Name = "autoStartOnLogin", Order = 9)]
+    private bool? SerializedAutoStartOnLogin
+    {
+        get => _autoStartOnLogin;
+        set => _autoStartOnLogin = value;
+    }
+
+    [IgnoreDataMember]
+    public bool AutoStartOnLogin
+    {
+        get => _autoStartOnLogin ?? true;
+        set => _autoStartOnLogin = value;
+    }
 
     public void Normalize()
     {
@@ -74,6 +90,7 @@ public sealed class AppSettings
             : Math.Min(
                 Math.Max(CardFontSize, MinimumCardFontSize),
                 MaximumCardFontSize);
+        _autoStartOnLogin ??= true;
     }
 
     private static bool IsFinite(double value)

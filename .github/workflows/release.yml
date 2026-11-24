@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing release tag, for example v1.2.9"
+        description: "Existing release tag, for example v1.3.0"
         required: true
         type: string
 
@@ -50,6 +50,7 @@ jobs:
           $tag = "${{ inputs.tag }}"
           $version = $tag.TrimStart("v")
           $asset = "artifacts/windows/ClipNest-$version.exe"
+          $expectedAsset = Split-Path $asset -Leaf
           if (-not (Test-Path $asset)) {
             throw "Release executable not found: $asset"
           }
@@ -58,7 +59,7 @@ jobs:
           if ($LASTEXITCODE -eq 0) {
             $release = $existing | ConvertFrom-Json
             foreach ($item in $release.assets) {
-              if ($item.name -like "*.zip") {
+              if ($item.name -ne $expectedAsset) {
                 gh release delete-asset $tag $item.name --yes
               }
             }

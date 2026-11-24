@@ -16,13 +16,15 @@ public partial class SettingsWindow : Window
         int cardTextLimit,
         double cardFontSize,
         HotKeyDefinition hotKey,
-        bool hideAfterCopy)
+        bool hideAfterCopy,
+        bool autoStartOnLogin)
     {
         InitializeComponent();
         TextLimitTextBox.Text = cardTextLimit.ToString(CultureInfo.CurrentCulture);
         FontSizeTextBox.Text = cardFontSize.ToString("0.#", CultureInfo.CurrentCulture);
         _hotKey = hotKey ?? throw new ArgumentNullException(nameof(hotKey));
         HideAfterCopyCheckBox.IsChecked = hideAfterCopy;
+        AutoStartCheckBox.IsChecked = autoStartOnLogin;
         VersionTextBlock.Text = $"版本 {AppVersion.Display}";
         UpdateHotKeyButton();
     }
@@ -36,6 +38,8 @@ public partial class SettingsWindow : Window
     public HotKeyDefinition HotKey => _hotKey;
 
     public bool HideAfterCopy { get; private set; }
+
+    public bool AutoStartOnLogin { get; private set; }
 
     private void SaveButton_Click(object sender, RoutedEventArgs eventArgs)
     {
@@ -60,6 +64,7 @@ public partial class SettingsWindow : Window
             Math.Max(fontSize, AppSettings.MinimumCardFontSize),
             AppSettings.MaximumCardFontSize);
         HideAfterCopy = HideAfterCopyCheckBox.IsChecked == true;
+        AutoStartOnLogin = AutoStartCheckBox.IsChecked == true;
         DialogResult = true;
     }
 

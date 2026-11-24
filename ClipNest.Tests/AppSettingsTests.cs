@@ -5,6 +5,12 @@ namespace ClipNest.Tests;
 
 public sealed class AppSettingsTests
 {
+    [Fact]
+    public void NewSettings_EnableAutoStartByDefault()
+    {
+        Assert.True(new AppSettings().AutoStartOnLogin);
+    }
+
     [Theory]
     [InlineData(100, 450)]
     [InlineData(450, 450)]

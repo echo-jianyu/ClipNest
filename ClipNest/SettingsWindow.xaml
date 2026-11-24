@@ -30,6 +30,7 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
@@ -156,6 +157,31 @@
                         FontSize="12.5"
                         FontWeight="SemiBold"
                         Foreground="{StaticResource InkBrush}"
+                        Text="开机自启动" />
+                    <TextBlock
+                        Margin="0,3,0,0"
+                        FontSize="10.5"
+                        Foreground="{StaticResource MutedBrush}"
+                        Text="登录 Windows 后自动运行 ClipNest" />
+                </StackPanel>
+                <CheckBox
+                    x:Name="AutoStartCheckBox"
+                    Grid.Column="1"
+                    VerticalAlignment="Center"
+                    AutomationProperties.Name="开机自启动"
+                    Style="{StaticResource ToggleSwitchStyle}" />
+            </Grid>
+
+            <Grid Grid.Row="5" Margin="0,16,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock
+                        FontSize="12.5"
+                        FontWeight="SemiBold"
+                        Foreground="{StaticResource InkBrush}"
                         Text="复制后自动隐藏" />
                     <TextBlock
                         Margin="0,3,0,0"
@@ -172,7 +198,7 @@
             </Grid>
 
             <Border
-                Grid.Row="5"
+                Grid.Row="6"
                 Margin="0,16,0,0"
                 Padding="0,14,0,0"
                 BorderBrush="{StaticResource LineBrush}"
@@ -252,7 +278,7 @@
             </Border>
 
             <Border
-                Grid.Row="7"
+                Grid.Row="8"
                 Margin="0,16,0,0"
                 Padding="0,14,0,0"
                 BorderBrush="{StaticResource LineBrush}"

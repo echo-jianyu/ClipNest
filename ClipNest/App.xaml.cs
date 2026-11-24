@@ -33,6 +33,7 @@ public partial class App : System.Windows.Application, IDisposable
     private IntPtr _trayMenuForegroundHook;
     private HistoryStore? _historyStore;
     private MainViewModel? _viewModel;
+    private AutoStartService? _autoStartService;
     private bool _isShuttingDown;
     private bool _resourcesDisposed;
 
@@ -58,6 +59,15 @@ public partial class App : System.Windows.Application, IDisposable
             var settingsStore = new SettingsStore(AppPaths.SettingsFile);
             var settings = await settingsStore.LoadAsync();
             var history = await _historyStore.LoadAsync();
+            var executablePath =
+                System.Reflection.Assembly.GetEntryAssembly()?.Location
+                ?? throw new InvalidOperationException("无法确定 ClipNest 的程序路径。");
+            _autoStartService = new AutoStartService(executablePath);
+            var autoStartWarning = _autoStartService.TrySetEnabled(
+                settings.AutoStartOnLogin,
+                out _)
+                ? null
+                : "无法更新开机自启动设置。";
             var clipboardService = new ClipboardService();
             _viewModel = new MainViewModel(clipboardService, history);
             _mainWindow = new MainWindow(
@@ -65,6 +75,7 @@ public partial class App : System.Windows.Application, IDisposable
                 clipboardService,
                 _historyStore,
                 settingsStore,
+                _autoStartService,
                 settings);
             _mainWindow.HotKeyChanged += MainWindow_HotKeyChanged;
 
@@ -74,6 +85,7 @@ public partial class App : System.Windows.Application, IDisposable
 
             var warnings = new[]
             {
+                autoStartWarning,
                 _historyStore.LastWarning,
                 _mainWindow.RegistrationWarning
             }.Where(message => !string.IsNullOrWhiteSpace(message));

@@ -61,7 +61,8 @@ internal static class Program
                 40,
                 13.5,
                 HotKeyDefinition.Default,
-                hideAfterCopy: true);
+                hideAfterCopy: true,
+                autoStartOnLogin: true);
             RenderWindowContent(settingsWindow, outputPath);
             application.Shutdown();
             return;
@@ -77,6 +78,7 @@ internal static class Program
             clipboard,
             historyStore,
             settingsStore,
+            new AutoStartService(Path.Combine(tempDirectory, "ClipNest.exe")),
             new AppSettings());
 
         clipboard.Emit(ClipContent.FromText("把灵感收进 ClipNest，需要时随手取用。"));

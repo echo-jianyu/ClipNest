@@ -57,7 +57,6 @@
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
                         <Image
@@ -107,22 +106,6 @@
                                 ToolTip="全局快捷键冲突，点击设置重新设置"
                                 Visibility="Collapsed" />
                         </Grid>
-
-                        <Button
-                            x:Name="HideButton"
-                            Grid.Column="3"
-                            Width="26"
-                            Height="26"
-                            AutomationProperties.Name="隐藏 ClipNest"
-                            Click="HideButton_Click"
-                            Style="{StaticResource IconButtonStyle}"
-                            ToolTip="隐藏">
-                            <Path
-                                Width="12"
-                                Height="12"
-                                Data="M2.5,5 L7,9.5 L11.5,5"
-                                Style="{StaticResource IconPathStyle}" />
-                        </Button>
                     </Grid>
                 </Border>
 
