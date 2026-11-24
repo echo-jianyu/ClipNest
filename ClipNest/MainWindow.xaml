@@ -84,10 +84,10 @@
                                 x:Name="MoreButton"
                                 Width="26"
                                 Height="26"
-                                AutomationProperties.Name="设置"
+                                AutomationProperties.Name="菜单"
                                 Click="MoreButton_Click"
                                 Style="{StaticResource IconButtonStyle}"
-                                ToolTip="设置">
+                                ToolTip="菜单">
                                 <Path
                                     Width="14"
                                     Height="14"

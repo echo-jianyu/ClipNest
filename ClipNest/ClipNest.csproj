@@ -12,7 +12,7 @@
     <GenerateSupportedRuntime>false</GenerateSupportedRuntime>
     <AssemblyName>ClipNest</AssemblyName>
     <RootNamespace>ClipNest</RootNamespace>
-    <Version>1.2.7</Version>
+    <Version>1.2.8</Version>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <Authors>ClipNest contributors</Authors>
     <Description>A compact, always-on-top clipboard history for Windows.</Description>

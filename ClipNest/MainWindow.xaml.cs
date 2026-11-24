@@ -741,7 +741,11 @@ public partial class MainWindow : Window, IDisposable
 
     private void MoreButton_Click(object sender, RoutedEventArgs eventArgs)
     {
-        ShowSettings();
+        if (Application.Current is App application)
+        {
+            application.ShowApplicationMenu(MoreButton);
+        }
+
         eventArgs.Handled = true;
     }
 
@@ -818,8 +822,8 @@ public partial class MainWindow : Window, IDisposable
             : Visibility.Visible;
         HideButton.ToolTip = $"隐藏 ({_hotKeyService.CurrentHotKey.DisplayText})";
         MoreButton.ToolTip = _hotKeyAvailable
-            ? "设置"
-            : "设置 · 快捷键冲突";
+            ? "菜单"
+            : "菜单 · 快捷键冲突";
     }
 
     private async Task SaveSettingsAsync()

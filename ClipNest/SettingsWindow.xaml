@@ -4,7 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="设置"
     Width="450"
-    Height="430"
+    Height="470"
     AllowsTransparency="True"
     Background="Transparent"
     FontFamily="Microsoft YaHei UI"
@@ -177,34 +177,78 @@
                 Padding="0,14,0,0"
                 BorderBrush="{StaticResource LineBrush}"
                 BorderThickness="0,1,0,0">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <StackPanel VerticalAlignment="Center">
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
                         <TextBlock
                             FontSize="12.5"
                             FontWeight="SemiBold"
                             Foreground="{StaticResource InkBrush}"
-                            Text="版本信息" />
+                            Text="关于 ClipNest" />
                         <TextBlock
                             x:Name="VersionTextBlock"
-                            Margin="0,3,0,0"
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
                             FontSize="10.5"
                             Foreground="{StaticResource MutedBrush}"
                             Text="ClipNest" />
-                    </StackPanel>
-                    <Button
-                        x:Name="AboutButton"
-                        Grid.Column="1"
-                        MinWidth="72"
-                        Padding="13,6"
-                        VerticalAlignment="Center"
-                        Click="AboutButton_Click"
-                        Content="关于"
-                        Style="{StaticResource QuietTextButtonStyle}" />
-                </Grid>
+                    </Grid>
+                    <TextBlock
+                        Margin="0,5,0,0"
+                        FontSize="10.5"
+                        Foreground="{StaticResource MutedBrush}"
+                        Text="轻巧、常驻桌面最上层的 Windows 粘贴板历史工具，历史记录仅保存在本机。"
+                        TextWrapping="Wrap" />
+                    <Grid Margin="0,10,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="72" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <TextBlock
+                            FontSize="10.5"
+                            Foreground="{StaticResource MutedBrush}"
+                            Text="运行环境" />
+                        <TextBlock
+                            Grid.Column="1"
+                            FontSize="10.5"
+                            Foreground="{StaticResource InkBrush}"
+                            Text=".NET Framework 4.8" />
+                        <TextBlock
+                            Grid.Row="1"
+                            Margin="0,6,0,0"
+                            FontSize="10.5"
+                            Foreground="{StaticResource MutedBrush}"
+                            Text="许可证" />
+                        <TextBlock
+                            Grid.Row="1"
+                            Grid.Column="1"
+                            Margin="0,6,0,0"
+                            FontSize="10.5"
+                            Foreground="{StaticResource InkBrush}"
+                            Text="MIT License" />
+                        <TextBlock
+                            Grid.Row="2"
+                            Margin="0,6,0,0"
+                            FontSize="10.5"
+                            Foreground="{StaticResource MutedBrush}"
+                            Text="数据位置" />
+                        <TextBlock
+                            Grid.Row="2"
+                            Grid.Column="1"
+                            Margin="0,6,0,0"
+                            FontSize="10.5"
+                            Foreground="{StaticResource InkBrush}"
+                            Text="%LOCALAPPDATA%\ClipNest" />
+                    </Grid>
+                </StackPanel>
             </Border>
 
             <Border

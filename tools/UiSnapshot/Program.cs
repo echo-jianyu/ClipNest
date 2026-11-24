@@ -20,7 +20,6 @@ internal static class Program
         var searchMode = args.Contains("--search", StringComparer.OrdinalIgnoreCase);
         var confirmMode = args.Contains("--confirm", StringComparer.OrdinalIgnoreCase);
         var settingsMode = args.Contains("--settings", StringComparer.OrdinalIgnoreCase);
-        var aboutMode = args.Contains("--about", StringComparer.OrdinalIgnoreCase);
         var outputArgument = args.FirstOrDefault(argument => !argument.StartsWith("--", StringComparison.Ordinal));
         var outputPath = outputArgument is not null
             ? Path.GetFullPath(outputArgument)
@@ -64,13 +63,6 @@ internal static class Program
                 HotKeyDefinition.Default,
                 hideAfterCopy: true);
             RenderWindowContent(settingsWindow, outputPath);
-            application.Shutdown();
-            return;
-        }
-
-        if (aboutMode)
-        {
-            RenderWindowContent(new AboutWindow(), outputPath);
             application.Shutdown();
             return;
         }

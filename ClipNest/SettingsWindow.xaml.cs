@@ -23,7 +23,7 @@ public partial class SettingsWindow : Window
         FontSizeTextBox.Text = cardFontSize.ToString("0.#", CultureInfo.CurrentCulture);
         _hotKey = hotKey ?? throw new ArgumentNullException(nameof(hotKey));
         HideAfterCopyCheckBox.IsChecked = hideAfterCopy;
-        VersionTextBlock.Text = $"ClipNest {AppVersion.Display}";
+        VersionTextBlock.Text = $"版本 {AppVersion.Display}";
         UpdateHotKeyButton();
     }
 
@@ -74,16 +74,6 @@ public partial class SettingsWindow : Window
         HotKeyButton.Content = "请按组合键…";
         HotKeyButton.Focus();
         Keyboard.Focus(HotKeyButton);
-        eventArgs.Handled = true;
-    }
-
-    private void AboutButton_Click(object sender, RoutedEventArgs eventArgs)
-    {
-        var dialog = new AboutWindow
-        {
-            Owner = this
-        };
-        dialog.ShowDialog();
         eventArgs.Handled = true;
     }
 

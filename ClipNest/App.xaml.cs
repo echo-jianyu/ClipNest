@@ -306,6 +306,26 @@ public partial class App : System.Windows.Application, IDisposable
         }
 
         UpdateTrayMenuState();
+        _trayContextMenu.PlacementTarget = null;
+        _trayContextMenu.Placement = PlacementMode.MousePoint;
+        _trayContextMenu.IsOpen = true;
+    }
+
+    public void ShowApplicationMenu(UIElement placementTarget)
+    {
+        if (placementTarget is null)
+        {
+            throw new ArgumentNullException(nameof(placementTarget));
+        }
+
+        if (_trayContextMenu is null)
+        {
+            return;
+        }
+
+        UpdateTrayMenuState();
+        _trayContextMenu.PlacementTarget = placementTarget;
+        _trayContextMenu.Placement = PlacementMode.Bottom;
         _trayContextMenu.IsOpen = true;
     }
 
