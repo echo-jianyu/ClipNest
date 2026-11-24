@@ -114,13 +114,14 @@ internal static class Program
             viewModel.SearchText = "ClipNest";
         }
 
-        var previewWidth = wideMode ? 600 : 450;
+        var previewWidth = wideMode ? 600 : 400;
+        const double previewHeight = 400;
         window.Width = previewWidth;
-        window.Height = 300;
+        window.Height = previewHeight;
 
         var content = (FrameworkElement)window.Content;
-        content.Measure(new Size(previewWidth, 300));
-        content.Arrange(new Rect(0, 0, previewWidth, 300));
+        content.Measure(new Size(previewWidth, previewHeight));
+        content.Arrange(new Rect(0, 0, previewWidth, previewHeight));
         content.UpdateLayout();
 
         var previewFrame = new DispatcherFrame();
@@ -135,7 +136,7 @@ internal static class Program
         content.UpdateLayout();
 
         var pixelWidth = previewWidth * 2;
-        const int pixelHeight = 600;
+        const int pixelHeight = (int)(previewHeight * 2);
         var renderedWindow = new RenderTargetBitmap(
             pixelWidth,
             pixelHeight,

@@ -5,10 +5,11 @@ namespace ClipNest.Models;
 [DataContract]
 public sealed class AppSettings
 {
-    public const double MinimumWidth = 450;
-    public const double DefaultWidth = 450;
+    public const double MinimumWidth = 400;
+    public const double DefaultWidth = 400;
+    public const double DefaultHeight = 400;
     public const double MaximumWidth = 900;
-    public const double AspectRatio = 3d / 2d;
+    public const double AspectRatio = 1d;
     public const int MinimumCardTextLimit = 20;
     public const int MaximumCardTextLimit = 200;
     public const double MinimumCardFontSize = 11;
@@ -20,7 +21,7 @@ public sealed class AppSettings
     public double Width { get; set; } = DefaultWidth;
 
     [DataMember(Name = "height", Order = 1)]
-    public double Height { get; set; } = DefaultWidth / AspectRatio;
+    public double Height { get; set; } = DefaultHeight;
 
     [DataMember(Name = "left", Order = 2)]
     public double? Left { get; set; }
@@ -64,6 +65,14 @@ public sealed class AppSettings
 
     public void Normalize()
     {
+        var usesLegacyAspectRatio = Height > 0
+            && Math.Abs(Height - (Width / (3d / 2d))) < 0.5;
+        if (usesLegacyAspectRatio)
+        {
+            Width = DefaultWidth;
+            Height = DefaultHeight;
+        }
+
         Width = IsFinite(Width)
             ? Math.Min(Math.Max(Width, MinimumWidth), MaximumWidth)
             : MinimumWidth;

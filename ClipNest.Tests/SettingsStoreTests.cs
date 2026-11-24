@@ -28,8 +28,8 @@ public sealed class SettingsStoreTests
 
             var settings = await store.LoadAsync();
 
-            Assert.Equal(450, settings.Width);
-            Assert.Equal(300, settings.Height);
+            Assert.Equal(400, settings.Width);
+            Assert.Equal(400, settings.Height);
             Assert.Equal(120, settings.Left);
             Assert.Equal(64, settings.Top);
             Assert.Equal(HotKeyDefinition.Default.Modifiers, settings.HotKeyModifiers);
@@ -70,7 +70,7 @@ public sealed class SettingsStoreTests
             var settings = await store.LoadAsync();
 
             Assert.Equal(480, settings.Width);
-            Assert.Equal(320, settings.Height);
+            Assert.Equal(480, settings.Height);
             Assert.Equal(88, settings.Left);
             Assert.Equal(32, settings.Top);
             Assert.Equal(HotKeyDefinition.ControlModifier, settings.HotKeyModifiers);

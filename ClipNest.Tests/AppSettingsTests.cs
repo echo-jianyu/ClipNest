@@ -12,10 +12,13 @@ public sealed class AppSettingsTests
     }
 
     [Theory]
-    [InlineData(100, 450)]
+    [InlineData(100, 400)]
+    [InlineData(400, 400)]
     [InlineData(450, 450)]
     [InlineData(1800, 900)]
-    public void Normalize_ClampsWidthAndMaintainsAspectRatio(double requestedWidth, double expectedWidth)
+    public void Normalize_ClampsWidthAndUsesSquareAspectRatio(
+        double requestedWidth,
+        double expectedWidth)
     {
         var settings = new AppSettings { Width = requestedWidth, Height = 900 };
 
@@ -23,6 +26,21 @@ public sealed class AppSettingsTests
 
         Assert.Equal(expectedWidth, settings.Width);
         Assert.Equal(expectedWidth / AppSettings.AspectRatio, settings.Height, precision: 6);
+    }
+
+    [Fact]
+    public void Normalize_ResetsLegacyRectangularWindowToDefaultSquare()
+    {
+        var settings = new AppSettings
+        {
+            Width = 580,
+            Height = 386.66666666666669
+        };
+
+        settings.Normalize();
+
+        Assert.Equal(400, settings.Width);
+        Assert.Equal(400, settings.Height);
     }
 
     [Fact]

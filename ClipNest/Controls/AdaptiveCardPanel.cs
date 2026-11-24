@@ -46,7 +46,7 @@ public sealed class AdaptiveCardPanel : Panel
         var width = double.IsNaN(availableSize.Width)
             || double.IsInfinity(availableSize.Width)
             || availableSize.Width <= 0
-            ? 450
+            ? 400
             : availableSize.Width;
         var columnWidth = Math.Max(1, width);
         var top = 0d;
