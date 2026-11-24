@@ -30,6 +30,7 @@ public sealed class SettingsStoreTests
 
             Assert.Equal(400, settings.Width);
             Assert.Equal(400, settings.Height);
+            Assert.Equal(1, settings.LayoutVersion);
             Assert.Equal(120, settings.Left);
             Assert.Equal(64, settings.Top);
             Assert.Equal(HotKeyDefinition.Default.Modifiers, settings.HotKeyModifiers);
@@ -57,6 +58,7 @@ public sealed class SettingsStoreTests
             await store.SaveAsync(new AppSettings
             {
                 Width = 480,
+                Height = 620,
                 Left = 88,
                 Top = 32,
                 HotKeyModifiers = HotKeyDefinition.ControlModifier,
@@ -70,7 +72,7 @@ public sealed class SettingsStoreTests
             var settings = await store.LoadAsync();
 
             Assert.Equal(480, settings.Width);
-            Assert.Equal(480, settings.Height);
+            Assert.Equal(620, settings.Height);
             Assert.Equal(88, settings.Left);
             Assert.Equal(32, settings.Top);
             Assert.Equal(HotKeyDefinition.ControlModifier, settings.HotKeyModifiers);

@@ -19,7 +19,7 @@ namespace ClipNest;
 
 public partial class MainWindow : Window, IDisposable
 {
-    private const double ResizeStep = 30;
+    private const double WheelScaleFactor = 1.08;
 
     private readonly MainViewModel _viewModel;
     private readonly IClipboardService _clipboardService;
@@ -38,6 +38,7 @@ public partial class MainWindow : Window, IDisposable
     private bool _isResizing;
     private Point _resizeStartCursor;
     private double _resizeStartWidth;
+    private double _resizeStartHeight;
     private bool _historySaveWarningShown;
     private bool _hotKeyAvailable = true;
     private ClipItem? _pressedClipItem;
@@ -208,9 +209,9 @@ public partial class MainWindow : Window, IDisposable
         Width = _settings.Width;
         Height = _settings.Height;
         MinWidth = AppSettings.MinimumWidth;
-        MinHeight = AppSettings.MinimumWidth / AppSettings.AspectRatio;
+        MinHeight = AppSettings.MinimumHeight;
         MaxWidth = AppSettings.MaximumWidth;
-        MaxHeight = AppSettings.MaximumWidth / AppSettings.AspectRatio;
+        MaxHeight = AppSettings.MaximumHeight;
 
         var virtualScreen = new Rect(
             SystemParameters.VirtualScreenLeft,
@@ -425,6 +426,7 @@ public partial class MainWindow : Window, IDisposable
         }
 
         _settings.Width = Width;
+        _settings.Height = Height;
         _settings.Left = Left;
         _settings.Top = Top;
 
@@ -458,13 +460,6 @@ public partial class MainWindow : Window, IDisposable
         if (_isResizing)
         {
             return;
-        }
-
-        if (Math.Abs(Width / Height - AppSettings.AspectRatio) > 0.01)
-        {
-            _isResizing = true;
-            Height = Width / AppSettings.AspectRatio;
-            _isResizing = false;
         }
 
         if (IsLoaded)
@@ -529,19 +524,28 @@ public partial class MainWindow : Window, IDisposable
             return;
         }
 
-        var direction = eventArgs.Delta > 0 ? 1 : -1;
-        var currentStep = Math.Round(Width / ResizeStep);
-        var nextWidth = Math.Min(
-            Math.Max(
-                (currentStep + direction) * ResizeStep,
-                AppSettings.MinimumWidth),
-            AppSettings.MaximumWidth);
-        var nextHeight = nextWidth / AppSettings.AspectRatio;
+        var workArea = GetCurrentMonitorWorkArea();
+        var maximumWidth = Math.Max(
+            AppSettings.MinimumWidth,
+            Math.Min(AppSettings.MaximumWidth, workArea.Width - 12));
+        var maximumHeight = Math.Max(
+            AppSettings.MinimumHeight,
+            Math.Min(AppSettings.MaximumHeight, workArea.Height - 12));
+        var scale = eventArgs.Delta > 0
+            ? WheelScaleFactor
+            : 1 / WheelScaleFactor;
+        var nextSize = CalculateScaledSize(
+            new Size(Width, Height),
+            scale,
+            AppSettings.MinimumWidth,
+            maximumWidth,
+            AppSettings.MinimumHeight,
+            maximumHeight);
 
         // Keep the window origin fixed; only the right and bottom edges move.
         _isResizing = true;
-        Width = nextWidth;
-        Height = nextHeight;
+        Width = nextSize.Width;
+        Height = nextSize.Height;
         _isResizing = false;
         ClampWindowToCurrentMonitor();
 
@@ -553,6 +557,7 @@ public partial class MainWindow : Window, IDisposable
     private void ResizeGrip_DragStarted(object sender, DragStartedEventArgs eventArgs)
     {
         _resizeStartWidth = Width;
+        _resizeStartHeight = Height;
         _resizeStartCursor = GetCursorScreenPositionInDips();
         _isResizing = true;
         _placementSaveTimer.Stop();
@@ -563,6 +568,7 @@ public partial class MainWindow : Window, IDisposable
         if (!_isResizing)
         {
             _resizeStartWidth = Width;
+            _resizeStartHeight = Height;
             _resizeStartCursor = GetCursorScreenPositionInDips();
             _isResizing = true;
         }
@@ -570,28 +576,28 @@ public partial class MainWindow : Window, IDisposable
         var workArea = GetCurrentMonitorWorkArea();
         var maximumWidth = Math.Max(
             AppSettings.MinimumWidth,
-            Math.Min(
-                AppSettings.MaximumWidth,
-                Math.Min(
-                    workArea.Width - 12,
-                    (workArea.Height - 12) * AppSettings.AspectRatio)));
-        var nextWidth = CalculateResizeWidth(
+            Math.Min(AppSettings.MaximumWidth, workArea.Width - 12));
+        var maximumHeight = Math.Max(
+            AppSettings.MinimumHeight,
+            Math.Min(AppSettings.MaximumHeight, workArea.Height - 12));
+        var nextSize = CalculateResizeSize(
             _resizeStartWidth,
+            _resizeStartHeight,
             _resizeStartCursor,
             GetCursorScreenPositionInDips(),
-            AppSettings.AspectRatio,
             AppSettings.MinimumWidth,
-            maximumWidth);
-        var nextHeight = nextWidth / AppSettings.AspectRatio;
+            maximumWidth,
+            AppSettings.MinimumHeight,
+            maximumHeight);
 
-        if (Math.Abs(nextWidth - Width) < 0.01
-            && Math.Abs(nextHeight - Height) < 0.01)
+        if (Math.Abs(nextSize.Width - Width) < 0.01
+            && Math.Abs(nextSize.Height - Height) < 0.01)
         {
             return;
         }
 
-        Width = nextWidth;
-        Height = nextHeight;
+        Width = nextSize.Width;
+        Height = nextSize.Height;
         Left = Math.Min(Math.Max(Left, workArea.Left), Math.Max(workArea.Left, workArea.Right - Width));
         Top = Math.Min(Math.Max(Top, workArea.Top), Math.Max(workArea.Top, workArea.Bottom - Height));
 
@@ -605,22 +611,56 @@ public partial class MainWindow : Window, IDisposable
         _placementSaveTimer.Start();
     }
 
-    internal static double CalculateResizeWidth(
+    internal static Size CalculateResizeSize(
         double startWidth,
+        double startHeight,
         Point startCursor,
         Point currentCursor,
-        double aspectRatio,
         double minimumWidth,
-        double maximumWidth)
+        double maximumWidth,
+        double minimumHeight,
+        double maximumHeight)
     {
-        var horizontalDelta = currentCursor.X - startCursor.X;
-        var verticalDelta = (currentCursor.Y - startCursor.Y) * aspectRatio;
-        var delta = Math.Abs(horizontalDelta) >= Math.Abs(verticalDelta)
-            ? horizontalDelta
-            : verticalDelta;
-        return Math.Min(
-            Math.Max(startWidth + delta, minimumWidth),
-            maximumWidth);
+        return new Size(
+            Math.Min(
+                Math.Max(
+                    startWidth + (currentCursor.X - startCursor.X),
+                    minimumWidth),
+                maximumWidth),
+            Math.Min(
+                Math.Max(
+                    startHeight + (currentCursor.Y - startCursor.Y),
+                    minimumHeight),
+                maximumHeight));
+    }
+
+    internal static Size CalculateScaledSize(
+        Size currentSize,
+        double requestedScale,
+        double minimumWidth,
+        double maximumWidth,
+        double minimumHeight,
+        double maximumHeight)
+    {
+        if (currentSize.Width <= 0
+            || currentSize.Height <= 0
+            || requestedScale <= 0)
+        {
+            return currentSize;
+        }
+
+        var minimumScale = Math.Max(
+            minimumWidth / currentSize.Width,
+            minimumHeight / currentSize.Height);
+        var maximumScale = Math.Min(
+            maximumWidth / currentSize.Width,
+            maximumHeight / currentSize.Height);
+        var scale = Math.Min(
+            Math.Max(requestedScale, minimumScale),
+            maximumScale);
+        return new Size(
+            currentSize.Width * scale,
+            currentSize.Height * scale);
     }
 
     private Point GetCursorScreenPositionInDips()

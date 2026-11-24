@@ -12,35 +12,51 @@ public sealed class AppSettingsTests
     }
 
     [Theory]
-    [InlineData(100, 400)]
-    [InlineData(400, 400)]
-    [InlineData(450, 450)]
-    [InlineData(1800, 900)]
-    public void Normalize_ClampsWidthAndUsesSquareAspectRatio(
+    [InlineData(100, 100, 320, 240)]
+    [InlineData(400, 400, 400, 400)]
+    [InlineData(450, 700, 450, 700)]
+    [InlineData(500, 100, 500, 240)]
+    [InlineData(1800, 1200, 900, 900)]
+    public void Normalize_ClampsWidthAndHeightIndependently(
         double requestedWidth,
-        double expectedWidth)
+        double requestedHeight,
+        double expectedWidth,
+        double expectedHeight)
     {
-        var settings = new AppSettings { Width = requestedWidth, Height = 900 };
+        var settings = new AppSettings
+        {
+            Width = requestedWidth,
+            Height = requestedHeight
+        };
 
         settings.Normalize();
 
         Assert.Equal(expectedWidth, settings.Width);
-        Assert.Equal(expectedWidth / AppSettings.AspectRatio, settings.Height, precision: 6);
+        Assert.Equal(expectedHeight, settings.Height);
     }
 
     [Fact]
-    public void Normalize_ResetsLegacyRectangularWindowToDefaultSquare()
+    public void Normalize_ResetsLegacyWindowLayoutOnce()
     {
         var settings = new AppSettings
         {
             Width = 580,
-            Height = 386.66666666666669
+            Height = 386.66666666666669,
+            LayoutVersion = 0
         };
 
         settings.Normalize();
 
         Assert.Equal(400, settings.Width);
         Assert.Equal(400, settings.Height);
+        Assert.Equal(1, settings.LayoutVersion);
+
+        settings.Width = 580;
+        settings.Height = 386.66666666666669;
+        settings.Normalize();
+
+        Assert.Equal(580, settings.Width);
+        Assert.Equal(386.66666666666669, settings.Height, precision: 6);
     }
 
     [Fact]

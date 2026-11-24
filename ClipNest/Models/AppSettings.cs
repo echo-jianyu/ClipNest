@@ -5,17 +5,21 @@ namespace ClipNest.Models;
 [DataContract]
 public sealed class AppSettings
 {
-    public const double MinimumWidth = 400;
+    private const int CurrentLayoutVersion = 1;
+
+    public const double MinimumWidth = 320;
     public const double DefaultWidth = 400;
     public const double DefaultHeight = 400;
+    public const double MinimumHeight = 240;
     public const double MaximumWidth = 900;
-    public const double AspectRatio = 1d;
+    public const double MaximumHeight = 900;
     public const int MinimumCardTextLimit = 20;
     public const int MaximumCardTextLimit = 200;
     public const double MinimumCardFontSize = 11;
     public const double MaximumCardFontSize = 20;
 
     private bool? _autoStartOnLogin;
+    private int _layoutVersion = CurrentLayoutVersion;
 
     [DataMember(Name = "width", Order = 0)]
     public double Width { get; set; } = DefaultWidth;
@@ -65,18 +69,19 @@ public sealed class AppSettings
 
     public void Normalize()
     {
-        var usesLegacyAspectRatio = Height > 0
-            && Math.Abs(Height - (Width / (3d / 2d))) < 0.5;
-        if (usesLegacyAspectRatio)
+        if (_layoutVersion < CurrentLayoutVersion)
         {
             Width = DefaultWidth;
             Height = DefaultHeight;
+            _layoutVersion = CurrentLayoutVersion;
         }
 
         Width = IsFinite(Width)
             ? Math.Min(Math.Max(Width, MinimumWidth), MaximumWidth)
-            : MinimumWidth;
-        Height = Width / AspectRatio;
+            : DefaultWidth;
+        Height = IsFinite(Height)
+            ? Math.Min(Math.Max(Height, MinimumHeight), MaximumHeight)
+            : DefaultHeight;
 
         if (Left is not null && !IsFinite(Left.Value))
         {
@@ -105,6 +110,19 @@ public sealed class AppSettings
                 Math.Max(CardFontSize, MinimumCardFontSize),
                 MaximumCardFontSize);
         _autoStartOnLogin ??= false;
+    }
+
+    [DataMember(Name = "layoutVersion", Order = 10, EmitDefaultValue = false)]
+    public int LayoutVersion
+    {
+        get => _layoutVersion;
+        set => _layoutVersion = value;
+    }
+
+    [OnDeserializing]
+    private void OnDeserializing(StreamingContext context)
+    {
+        _layoutVersion = 0;
     }
 
     private static bool IsFinite(double value)
