@@ -1,4 +1,6 @@
 using System.IO;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using ClipNest.Models;
 using ClipNest.Services;
 
@@ -193,6 +195,70 @@ public sealed class HistoryStoreTests
         {
             Directory.Delete(directory, recursive: true);
         }
+    }
+
+    [Fact]
+    public async Task Save_DoesNotOverwriteAnImageEditedWhileSnapshotIsPersisted()
+    {
+        var directory = CreateTempDirectory();
+        var path = Path.Combine(directory, "history.json");
+
+        try
+        {
+            using var store = new HistoryStore(path);
+            var originalContent = ClipContent.FromImage(
+                EncodePng(20, 120, 110),
+                2,
+                2);
+            var item = ClipItem.Create(originalContent);
+
+            var saveTask = store.SaveAsync([item]);
+            item.ReplaceImage(EncodePng(220, 40, 20), 3, 3);
+            var result = await saveTask;
+
+            var externalized = Assert.Single(result.ExternalizedImages);
+            Assert.False(item.TryAttachExternalImage(
+                externalized.ImagePath,
+                externalized.Signature,
+                externalized.InlineImagePngBase64));
+            Assert.Equal(
+                ClipContent.FromImage(EncodePng(220, 40, 20), 3, 3).Signature,
+                item.Signature);
+
+            var loaded = Assert.Single(await store.LoadAsync());
+            Assert.Equal(originalContent.Signature, loaded.Signature);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    private static byte[] EncodePng(byte red, byte green, byte blue)
+    {
+        var pixels = new byte[2 * 2 * 4];
+        for (var index = 0; index < pixels.Length; index += 4)
+        {
+            pixels[index] = red;
+            pixels[index + 1] = green;
+            pixels[index + 2] = blue;
+            pixels[index + 3] = 255;
+        }
+
+        var bitmap = BitmapSource.Create(
+            2,
+            2,
+            96,
+            96,
+            PixelFormats.Bgra32,
+            palette: null,
+            pixels,
+            2 * 4);
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        using var stream = new MemoryStream();
+        encoder.Save(stream);
+        return stream.ToArray();
     }
 
     private static string CreateTempDirectory()

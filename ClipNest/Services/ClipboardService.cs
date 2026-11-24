@@ -21,10 +21,20 @@ public sealed class ClipboardService : IClipboardService
     private const int CaptureAttempts = 10;
     private const int CaptureRetryDelayMilliseconds = 75;
     private const int ClipboardPollIntervalMilliseconds = 1000;
+    internal const int MaxCapturedTextCharacters = 1_000_000;
     private const string InternalCopyFormat = "ClipNest.InternalCopy";
+    private const string ExcludeFromMonitorFormat =
+        "ExcludeClipboardContentFromMonitorProcessing";
+    private const string CanIncludeInHistoryFormat =
+        "CanIncludeInClipboardHistory";
+    private const string ClipboardViewerIgnoreFormat =
+        "Clipboard Viewer Ignore";
+    private const int DragFileRetentionHours = 24;
 
     private readonly object _copyStateLock = new();
     private readonly object _clipboardThreadLock = new();
+    private static readonly object DragCleanupLock = new();
+    private static DateTime _lastDragCleanupUtc;
     private IntPtr _windowHandle;
     private HwndSource? _source;
     private Dispatcher? _dispatcher;
@@ -42,6 +52,8 @@ public sealed class ClipboardService : IClipboardService
     private bool _disposed;
 
     public event EventHandler<ClipContent>? ContentChanged;
+
+    public event EventHandler<ClipboardCaptureRejectedEventArgs>? CaptureRejected;
 
     public void Attach(Window window)
     {
@@ -310,12 +322,7 @@ public sealed class ClipboardService : IClipboardService
         {
             var bytes = item.GetImageBytes()
                 ?? throw new InvalidOperationException("Image data is missing.");
-            var imagePath = item.ImageFilePath;
-            if (string.IsNullOrWhiteSpace(imagePath) || !File.Exists(imagePath))
-            {
-                imagePath = EnsureDragImageFile(bytes, item.Signature);
-            }
-
+            var imagePath = EnsureDragImageFile(bytes, item.Signature);
             dataObject.SetData(WpfDataFormats.FileDrop, new[] { imagePath });
         }
 
@@ -367,6 +374,7 @@ public sealed class ClipboardService : IClipboardService
     {
         var directory = Path.Combine(Path.GetTempPath(), "ClipNest", "drag");
         Directory.CreateDirectory(directory);
+        CleanupOldDragFiles(directory);
 
         var fileName = GetImageHash(signature, bytes);
         var path = Path.Combine(directory, $"{fileName}.png");
@@ -396,6 +404,48 @@ public sealed class ClipboardService : IClipboardService
                 if (File.Exists(temporaryPath))
                 {
                     File.Delete(temporaryPath);
+                }
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+        }
+    }
+
+    private static void CleanupOldDragFiles(string directory)
+    {
+        lock (DragCleanupLock)
+        {
+            var now = DateTime.UtcNow;
+            if (now - _lastDragCleanupUtc < TimeSpan.FromMinutes(10))
+            {
+                return;
+            }
+
+            _lastDragCleanupUtc = now;
+            var cutoff = now.AddHours(-DragFileRetentionHours);
+            try
+            {
+                foreach (var path in Directory.EnumerateFiles(directory))
+                {
+                    try
+                    {
+                        if (File.GetLastWriteTimeUtc(path) >= cutoff)
+                        {
+                            continue;
+                        }
+
+                        File.Delete(path);
+                    }
+                    catch (IOException)
+                    {
+                    }
+                    catch (UnauthorizedAccessException)
+                    {
+                    }
                 }
             }
             catch (IOException)
@@ -549,6 +599,18 @@ public sealed class ClipboardService : IClipboardService
                     return;
                 }
 
+                if (!snapshot.IsImage
+                    && snapshot.Text?.Length > MaxCapturedTextCharacters)
+                {
+                    MarkCaptureComplete(sequence);
+                    CaptureRejected?.Invoke(
+                        this,
+                        new ClipboardCaptureRejectedEventArgs(
+                            $"文本超过 {MaxCapturedTextCharacters:N0} 字符，" +
+                            "已跳过本次记录。"));
+                    return;
+                }
+
                 var content = await Task.Run(
                         () => BuildClipboardContent(snapshot, cancellationToken),
                         cancellationToken)
@@ -591,6 +653,7 @@ public sealed class ClipboardService : IClipboardService
             }
             catch (ExternalException)
             {
+                MarkCaptureComplete(sequence);
                 return;
             }
             catch (InvalidOperationException)
@@ -717,6 +780,7 @@ public sealed class ClipboardService : IClipboardService
     {
         var dataObject = WpfClipboard.GetDataObject();
         if (dataObject is null
+            || ShouldExcludeFromHistory(dataObject)
             || (!ignoreInternalMarker && dataObject.GetDataPresent(InternalCopyFormat)))
         {
             return null;
@@ -737,7 +801,8 @@ public sealed class ClipboardService : IClipboardService
         if (hasPng)
         {
             var pngBytes = TryReadBytes(dataObject.GetData("PNG", true));
-            if (pngBytes is not null)
+            if (pngBytes is not null
+                && IsUsableClipboardBitmap(TryDecodeImage(pngBytes)))
             {
                 return ClipboardSnapshot.FromPng(pngBytes, text, rtf, html);
             }
@@ -767,7 +832,9 @@ public sealed class ClipboardService : IClipboardService
         }
 
         var formsImage = FormsClipboard.GetImage();
-        if (formsImage is not null)
+        if (formsImage is not null
+            && formsImage.Width > 1
+            && formsImage.Height > 1)
         {
             return ClipboardSnapshot.FromFormsImage(formsImage, text, rtf, html);
         }
@@ -796,6 +863,82 @@ public sealed class ClipboardService : IClipboardService
         catch (ExternalException)
         {
             return null;
+        }
+    }
+
+    internal static bool ShouldExcludeFromHistory(System.Windows.IDataObject dataObject)
+    {
+        if (dataObject is null)
+        {
+            throw new ArgumentNullException(nameof(dataObject));
+        }
+
+        try
+        {
+            if (HasClipboardFormat(dataObject, ExcludeFromMonitorFormat)
+                || HasClipboardFormat(dataObject, ClipboardViewerIgnoreFormat))
+            {
+                return true;
+            }
+
+            if (!HasClipboardFormat(dataObject, CanIncludeInHistoryFormat))
+            {
+                return false;
+            }
+
+            return IsClipboardFlagDisabled(
+                dataObject.GetData(CanIncludeInHistoryFormat, true));
+        }
+        catch (ExternalException)
+        {
+            return true;
+        }
+        catch (InvalidOperationException)
+        {
+            return true;
+        }
+    }
+
+    private static bool HasClipboardFormat(
+        System.Windows.IDataObject dataObject,
+        string format)
+    {
+        return dataObject
+            .GetFormats(true)
+            .Any(candidate => string.Equals(
+                candidate,
+                format,
+                StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool IsClipboardFlagDisabled(object? value)
+    {
+        try
+        {
+            return value switch
+            {
+                null => true,
+                bool boolean => !boolean,
+                byte byteValue => byteValue == 0,
+                short shortValue => shortValue == 0,
+                ushort unsignedShortValue => unsignedShortValue == 0,
+                int integerValue => integerValue == 0,
+                uint unsignedIntegerValue => unsignedIntegerValue == 0,
+                long longValue => longValue == 0,
+                ulong unsignedLongValue => unsignedLongValue == 0,
+                byte[] bytes when bytes.Length >= sizeof(uint) =>
+                    BitConverter.ToUInt32(bytes, 0) == 0,
+                string text when long.TryParse(
+                    text,
+                    System.Globalization.NumberStyles.Integer,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out var parsed) => parsed == 0,
+                _ => true
+            };
+        }
+        catch (ArgumentException)
+        {
+            return true;
         }
     }
 

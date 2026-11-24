@@ -48,7 +48,7 @@ internal static class Program
         {
             var confirmWindow = new ConfirmWindow(
                 "清空历史",
-                "此操作会去清空所有文字和图片记录，无法撤销，确定清空吗？",
+                "此操作会清空所有文字和图片记录，无法撤销，确定清空吗？",
                 "清空历史");
             RenderWindowContent(confirmWindow, outputPath);
             application.Shutdown();
@@ -262,6 +262,12 @@ internal static class Program
     private sealed class PreviewClipboardService : IClipboardService
     {
         public event EventHandler<ClipContent>? ContentChanged;
+
+        public event EventHandler<ClipboardCaptureRejectedEventArgs>? CaptureRejected
+        {
+            add { }
+            remove { }
+        }
 
         public void Attach(Window window)
         {

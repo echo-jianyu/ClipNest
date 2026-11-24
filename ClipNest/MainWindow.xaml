@@ -103,6 +103,7 @@
                                 VerticalAlignment="Top"
                                 AutomationProperties.Name="全局快捷键冲突"
                                 Fill="{StaticResource AccentBrush}"
+                                IsHitTestVisible="False"
                                 ToolTip="全局快捷键冲突，点击设置重新设置"
                                 Visibility="Collapsed" />
                         </Grid>

@@ -37,7 +37,7 @@ public sealed class SettingsStoreTests
             Assert.False(settings.HideAfterCopy);
             Assert.Equal(40, settings.CardTextLimit);
             Assert.Equal(13.5, settings.CardFontSize);
-            Assert.True(settings.AutoStartOnLogin);
+            Assert.False(settings.AutoStartOnLogin);
         }
         finally
         {
@@ -79,6 +79,62 @@ public sealed class SettingsStoreTests
             Assert.Equal(72, settings.CardTextLimit);
             Assert.Equal(15, settings.CardFontSize);
             Assert.False(settings.AutoStartOnLogin);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Save_UsesStableSnapshotWhenCallerMutatesSettings()
+    {
+        var directory = CreateTempDirectory();
+        var path = Path.Combine(directory, "settings.json");
+
+        try
+        {
+            var store = new SettingsStore(path);
+            var settings = new AppSettings
+            {
+                Width = 480,
+                Left = 88,
+                Top = 32
+            };
+
+            var saveTask = store.SaveAsync(settings);
+            settings.Width = 900;
+            settings.Left = 700;
+            await saveTask;
+
+            var loaded = await store.LoadAsync();
+            Assert.Equal(480, loaded.Width);
+            Assert.Equal(88, loaded.Left);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ConcurrentSaves_KeepTheLatestRequestedSnapshot()
+    {
+        var directory = CreateTempDirectory();
+        var path = Path.Combine(directory, "settings.json");
+
+        try
+        {
+            var store = new SettingsStore(path);
+            var first = new AppSettings { Left = 10 };
+            var second = new AppSettings { Left = 20 };
+
+            await Task.WhenAll(
+                store.SaveAsync(first),
+                store.SaveAsync(second));
+
+            var loaded = await store.LoadAsync();
+            Assert.Equal(20, loaded.Left);
         }
         finally
         {

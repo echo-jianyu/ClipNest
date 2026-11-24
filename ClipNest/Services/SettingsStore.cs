@@ -6,9 +6,12 @@ using ClipNest.Models;
 
 namespace ClipNest.Services;
 
-public sealed class SettingsStore
+public sealed class SettingsStore : IDisposable
 {
     private readonly string _path;
+    private readonly SemaphoreSlim _writeLock = new(1, 1);
+    private long _lastSaveVersion;
+    private long _lastWrittenVersion;
 
     public SettingsStore(string path)
     {
@@ -51,12 +54,34 @@ public sealed class SettingsStore
             throw new ArgumentNullException(nameof(settings));
         }
 
-        settings.Normalize();
-        var json = await Task.Run(() => Serialize(settings), cancellationToken)
-            .ConfigureAwait(false);
-        await AtomicFile
-            .WriteAllBytesAsync(_path, json, cancellationToken)
-            .ConfigureAwait(false);
+        var snapshot = settings.CreateSnapshot();
+        snapshot.Normalize();
+        var saveVersion = Interlocked.Increment(ref _lastSaveVersion);
+
+        await _writeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (saveVersion < Interlocked.Read(ref _lastWrittenVersion))
+            {
+                return;
+            }
+
+            var json = await Task.Run(() => Serialize(snapshot), cancellationToken)
+                .ConfigureAwait(false);
+            await AtomicFile
+                .WriteAllBytesAsync(_path, json, cancellationToken)
+                .ConfigureAwait(false);
+            Interlocked.Exchange(ref _lastWrittenVersion, saveVersion);
+        }
+        finally
+        {
+            _writeLock.Release();
+        }
+    }
+
+    public void Dispose()
+    {
+        _writeLock.Dispose();
     }
 
     private static byte[] Serialize(AppSettings settings)

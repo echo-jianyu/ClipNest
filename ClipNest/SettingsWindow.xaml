@@ -88,8 +88,9 @@
                 <TextBox
                     x:Name="TextLimitTextBox"
                     Grid.Column="1"
+                    DataObject.Pasting="IntegerTextBox_Pasting"
                     Padding="5,4"
-                    PreviewTextInput="NumericTextBox_PreviewTextInput"
+                    PreviewTextInput="IntegerTextBox_PreviewTextInput"
                     Style="{StaticResource SettingsValueTextBoxStyle}"
                     TextAlignment="Center" />
             </Grid>
@@ -114,8 +115,9 @@
                 <TextBox
                     x:Name="FontSizeTextBox"
                     Grid.Column="1"
+                    DataObject.Pasting="FloatTextBox_Pasting"
                     Padding="5,4"
-                    PreviewTextInput="NumericTextBox_PreviewTextInput"
+                    PreviewTextInput="FloatTextBox_PreviewTextInput"
                     Style="{StaticResource SettingsValueTextBoxStyle}"
                     TextAlignment="Center" />
             </Grid>
@@ -144,6 +146,7 @@
                     Padding="12,7"
                     Click="HotKeyButton_Click"
                     Content="F4"
+                    LostKeyboardFocus="HotKeyButton_LostKeyboardFocus"
                     Style="{StaticResource QuietTextButtonStyle}" />
             </Grid>
 
@@ -303,6 +306,15 @@
                     </Grid>
                 </StackPanel>
             </Border>
+
+            <TextBlock
+                x:Name="ValidationMessage"
+                Grid.Row="7"
+                Margin="0,10,0,0"
+                FontSize="10.5"
+                Foreground="{StaticResource AccentBrush}"
+                TextWrapping="Wrap"
+                Visibility="Collapsed" />
 
             <Border
                 Grid.Row="8"

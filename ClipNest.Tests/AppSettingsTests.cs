@@ -1,14 +1,14 @@
-using ClipNest.Models;
 using System.Windows.Input;
+using ClipNest.Models;
 
 namespace ClipNest.Tests;
 
 public sealed class AppSettingsTests
 {
     [Fact]
-    public void NewSettings_EnableAutoStartByDefault()
+    public void NewSettings_DisableAutoStartByDefault()
     {
-        Assert.True(new AppSettings().AutoStartOnLogin);
+        Assert.False(new AppSettings().AutoStartOnLogin);
     }
 
     [Theory]
@@ -59,6 +59,13 @@ public sealed class AppSettingsTests
     [InlineData(0u, 0x73u, true)]
     [InlineData(HotKeyDefinition.ControlModifier, 0x56u, true)]
     [InlineData(HotKeyDefinition.ControlModifier, 0x11u, false)]
+    [InlineData(0u, 0x41u, false)]
+    [InlineData(HotKeyDefinition.ShiftModifier, 0x41u, false)]
+    [InlineData(HotKeyDefinition.ShiftModifier, 0x70u, false)]
+    [InlineData(
+        HotKeyDefinition.ControlModifier | HotKeyDefinition.ShiftModifier,
+        0x41u,
+        true)]
     public void HotKeyDefinition_ValidatesVirtualKeys(
         uint modifiers,
         uint virtualKey,
@@ -79,5 +86,15 @@ public sealed class AppSettingsTests
         Assert.NotNull(hotKey);
         Assert.Equal(virtualKey, hotKey.VirtualKey);
         Assert.Equal(0u, hotKey.Modifiers);
+    }
+
+    [Fact]
+    public void HotKeyDefinition_RejectsBareCharacterKeys()
+    {
+        var hotKey = HotKeyDefinition.FromKeyboard(
+            System.Windows.Input.Key.A,
+            ModifierKeys.None);
+
+        Assert.Null(hotKey);
     }
 }

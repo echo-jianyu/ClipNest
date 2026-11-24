@@ -68,7 +68,7 @@ public sealed class HistoryStore : IDisposable
         return items;
     }
 
-    public async Task SaveAsync(
+    public async Task<HistorySaveResult> SaveAsync(
         IReadOnlyList<ClipItem> items,
         CancellationToken cancellationToken = default)
     {
@@ -77,6 +77,7 @@ public sealed class HistoryStore : IDisposable
             throw new ArgumentNullException(nameof(items));
         }
 
+        var snapshots = items.Select(ClipItemSnapshot.FromItem).ToList();
         var saveVersion = Interlocked.Increment(ref _lastSaveVersion);
         await Task.Delay(1, cancellationToken).ConfigureAwait(false);
 
@@ -85,12 +86,25 @@ public sealed class HistoryStore : IDisposable
         {
             if (saveVersion < Interlocked.Read(ref _lastWrittenVersion))
             {
-                return;
+                return HistorySaveResult.Empty;
             }
 
-            var referencedImages = await ExternalizeImagesAsync(items, cancellationToken)
+            var externalizedImages = new List<ExternalizedImageRecord>();
+            var referencedImages = await ExternalizeImagesAsync(
+                    snapshots,
+                    externalizedImages,
+                    cancellationToken)
                 .ConfigureAwait(false);
-            var records = items.Select(ToStoredItem).ToList();
+            var externalizedFileNames = new Dictionary<Guid, string>();
+            foreach (var image in externalizedImages)
+            {
+                externalizedFileNames[image.ItemId] =
+                    Path.GetFileName(image.ImagePath);
+            }
+
+            var records = snapshots
+                .Select(item => ToStoredItem(item, externalizedFileNames))
+                .ToList();
             var json = await Task.Run(() => Serialize(records), cancellationToken)
                 .ConfigureAwait(false);
 
@@ -99,6 +113,7 @@ public sealed class HistoryStore : IDisposable
                 .ConfigureAwait(false);
             Interlocked.Exchange(ref _lastWrittenVersion, saveVersion);
             DeleteOrphanedImages(referencedImages);
+            return new HistorySaveResult(externalizedImages);
         }
         finally
         {
@@ -106,7 +121,8 @@ public sealed class HistoryStore : IDisposable
         }
     }
 
-    public Task ClearAsync(CancellationToken cancellationToken = default)
+    public Task<HistorySaveResult> ClearAsync(
+        CancellationToken cancellationToken = default)
     {
         return SaveAsync(Array.Empty<ClipItem>(), cancellationToken);
     }
@@ -295,8 +311,17 @@ public sealed class HistoryStore : IDisposable
         }
     }
 
-    private static StoredClipItem ToStoredItem(ClipItem item)
+    private static StoredClipItem ToStoredItem(
+        ClipItemSnapshot item,
+        Dictionary<Guid, string> externalizedFileNames)
     {
+        var imageFileName = externalizedFileNames.TryGetValue(
+            item.Id,
+            out var externalizedFileName)
+            ? externalizedFileName
+            : item.ImageFilePath is null
+                ? null
+                : Path.GetFileName(item.ImageFilePath);
         return new StoredClipItem
         {
             Id = item.Id,
@@ -304,9 +329,7 @@ public sealed class HistoryStore : IDisposable
             PlainText = item.PlainText,
             Rtf = item.Rtf,
             Html = item.Html,
-            ImageFileName = item.ImageFilePath is null
-                ? null
-                : Path.GetFileName(item.ImageFilePath),
+            ImageFileName = imageFileName,
             PixelWidth = item.PixelWidth,
             PixelHeight = item.PixelHeight,
             UpdatedAtUtcTicks = item.UpdatedAt.UtcDateTime.Ticks,
@@ -325,11 +348,40 @@ public sealed class HistoryStore : IDisposable
             return;
         }
 
-        await SaveAsync(items, cancellationToken).ConfigureAwait(false);
+        var result = await SaveAsync(items, cancellationToken).ConfigureAwait(false);
+        ApplyExternalizedImages(items, result);
+    }
+
+    internal static void ApplyExternalizedImages(
+        IEnumerable<ClipItem> items,
+        HistorySaveResult result)
+    {
+        if (result.ExternalizedImages.Count == 0)
+        {
+            return;
+        }
+
+        var itemsById = new Dictionary<Guid, ClipItem>();
+        foreach (var item in items)
+        {
+            itemsById[item.Id] = item;
+        }
+
+        foreach (var image in result.ExternalizedImages)
+        {
+            if (itemsById.TryGetValue(image.ItemId, out var item))
+            {
+                item.TryAttachExternalImage(
+                    image.ImagePath,
+                    image.Signature,
+                    image.InlineImagePngBase64);
+            }
+        }
     }
 
     private async Task<HashSet<string>> ExternalizeImagesAsync(
-        IReadOnlyList<ClipItem> items,
+        IReadOnlyList<ClipItemSnapshot> items,
+        List<ExternalizedImageRecord> externalizedImages,
         CancellationToken cancellationToken)
     {
         var referencedImages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -376,7 +428,14 @@ public sealed class HistoryStore : IDisposable
                     .ConfigureAwait(false);
             }
 
-            item.AttachImageFile(imagePath, notify: false);
+            if (item.InlineImagePngBase64 is not null)
+            {
+                externalizedImages.Add(new ExternalizedImageRecord(
+                    item.Id,
+                    item.Signature,
+                    item.InlineImagePngBase64,
+                    imagePath));
+            }
         }
 
         return referencedImages;
@@ -510,6 +569,97 @@ public sealed class HistoryStore : IDisposable
         public long Sequence { get; set; }
     }
 
+    private sealed class ClipItemSnapshot
+    {
+        private ClipItemSnapshot(
+            Guid id,
+            ClipContentKind kind,
+            string plainText,
+            string? rtf,
+            string? html,
+            string? inlineImagePngBase64,
+            string? imageFilePath,
+            int pixelWidth,
+            int pixelHeight,
+            DateTimeOffset updatedAt,
+            bool pinned,
+            string signature,
+            long sequence)
+        {
+            Id = id;
+            Kind = kind;
+            PlainText = plainText;
+            Rtf = rtf;
+            Html = html;
+            InlineImagePngBase64 = inlineImagePngBase64;
+            ImageFilePath = imageFilePath;
+            PixelWidth = pixelWidth;
+            PixelHeight = pixelHeight;
+            UpdatedAt = updatedAt;
+            Pinned = pinned;
+            Signature = signature;
+            Sequence = sequence;
+        }
+
+        public Guid Id { get; }
+
+        public ClipContentKind Kind { get; }
+
+        public string PlainText { get; }
+
+        public string? Rtf { get; }
+
+        public string? Html { get; }
+
+        public string? InlineImagePngBase64 { get; }
+
+        public string? ImageFilePath { get; }
+
+        public int PixelWidth { get; }
+
+        public int PixelHeight { get; }
+
+        public DateTimeOffset UpdatedAt { get; }
+
+        public bool Pinned { get; }
+
+        public string Signature { get; }
+
+        public long Sequence { get; }
+
+        public bool IsImage => Kind == ClipContentKind.Image;
+
+        public static ClipItemSnapshot FromItem(ClipItem item)
+        {
+            return new ClipItemSnapshot(
+                item.Id,
+                item.Kind,
+                item.PlainText,
+                item.Rtf,
+                item.Html,
+                item.InlineImagePngBase64,
+                item.ImageFilePath,
+                item.PixelWidth,
+                item.PixelHeight,
+                item.UpdatedAt,
+                item.Pinned,
+                item.Signature,
+                item.Sequence);
+        }
+
+        public byte[]? GetImageBytes()
+        {
+            if (InlineImagePngBase64 is not null)
+            {
+                return Convert.FromBase64String(InlineImagePngBase64);
+            }
+
+            return ImageFilePath is not null && File.Exists(ImageFilePath)
+                ? File.ReadAllBytes(ImageFilePath)
+                : null;
+        }
+    }
+
     [DataContract]
     private sealed class LegacyClipItem
     {
@@ -549,4 +699,40 @@ public sealed class HistoryStore : IDisposable
         [DataMember(Name = "pinned")]
         public bool Pinned { get; set; }
     }
+}
+
+public sealed class ExternalizedImageRecord
+{
+    internal ExternalizedImageRecord(
+        Guid itemId,
+        string signature,
+        string inlineImagePngBase64,
+        string imagePath)
+    {
+        ItemId = itemId;
+        Signature = signature;
+        InlineImagePngBase64 = inlineImagePngBase64;
+        ImagePath = imagePath;
+    }
+
+    public Guid ItemId { get; }
+
+    internal string Signature { get; }
+
+    internal string InlineImagePngBase64 { get; }
+
+    public string ImagePath { get; }
+}
+
+public sealed class HistorySaveResult
+{
+    public static HistorySaveResult Empty { get; } = new([]);
+
+    internal HistorySaveResult(
+        IReadOnlyList<ExternalizedImageRecord> externalizedImages)
+    {
+        ExternalizedImages = externalizedImages;
+    }
+
+    public IReadOnlyList<ExternalizedImageRecord> ExternalizedImages { get; }
 }

@@ -35,12 +35,16 @@ public sealed class AdaptiveCardPanel : Panel
 
         if (item.IsImage)
         {
+            var naturalWidth = item.PixelWidth + ImageCardInset;
+            var spanWidth = (columnWidth * columnCount)
+                + (Gap * (columnCount - 1));
             return item.PixelHeight > 0
                 && (double)item.PixelWidth / item.PixelHeight >= 1.6
-                && item.PixelWidth + ImageCardInset > columnWidth;
+                && naturalWidth > columnWidth
+                && naturalWidth >= spanWidth * 0.85;
         }
 
-        var textLength = NormalizeText(item.PlainText).Length;
+        var textLength = item.DisplayText.Length;
         var threshold = columnWidth >= 260 ? 90 : 58;
         return textLength > threshold;
     }
@@ -73,13 +77,13 @@ public sealed class AdaptiveCardPanel : Panel
                 Math.Max(48, displayHeight + ImageCardInset));
         }
 
-        var charactersPerLine = Math.Max(
+        var visualLength = EstimateVisualLength(item.DisplayText);
+        var visualUnitsPerLine = Math.Max(
             8,
-            (int)(cardWidth / Math.Max(1, item.DisplayFontSize * 1.04)));
-        var textLength = Math.Max(1, item.DisplayText.Length);
+            cardWidth / Math.Max(1, item.DisplayFontSize * 0.95));
         var lineCount = Math.Min(
             6,
-            Math.Max(1, (int)Math.Ceiling((double)textLength / charactersPerLine)));
+            Math.Max(1, (int)Math.Ceiling(visualLength / visualUnitsPerLine)));
         return Math.Min(
             140,
             Math.Max(
@@ -247,11 +251,15 @@ public sealed class AdaptiveCardPanel : Panel
         }
     }
 
-    private static string NormalizeText(string text)
+    private static double EstimateVisualLength(string text)
     {
-        return string.Join(
-            " ",
-            text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        var length = 0d;
+        foreach (var character in text)
+        {
+            length += character <= 0x7F ? 0.56 : 1;
+        }
+
+        return Math.Max(1, length);
     }
 
     private sealed class CardPlacement

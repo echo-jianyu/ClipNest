@@ -44,7 +44,7 @@ Typora 等编辑区域。
 - 默认 `450 × 300`，保持 `3:2` 比例，可拖动右下角缩放
 - 窗口始终置顶，不显示任务栏按钮，只保留系统托盘图标
 - 可配置全局快捷键、卡片字符数、字号和复制后自动隐藏
-- 支持随 Windows 登录自动启动，并可在设置页随时关闭
+- 支持随 Windows 登录自动启动，默认关闭，可在设置页主动开启
 - “关于”区域提供 GitHub 和 Gitee 项目链接
 
 ## 常用操作
@@ -102,6 +102,7 @@ Gitee OpenAPI 单独创建并上传同一 EXE。
 - 原生 WPF，单实例运行，不依赖第三方运行时 UI
 - `AddClipboardFormatListener` 与 `WM_CLIPBOARDUPDATE` 监听剪贴板
 - 通过 `WM_MOUSEACTIVATE` 保持即点即贴体验
+- 遵循 Windows 剪贴板监控排除协议，跳过密码管理器等敏感内容
 - `WS_EX_TOOLWINDOW`、`ShowInTaskbar=false`、`Topmost=true` 实现悬浮工具窗口
 - 历史保存采用临时文件原子替换，并支持损坏文件备份恢复
 - 支持 Per-Monitor V2 DPI

@@ -88,6 +88,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         SetFilterCommand = new RelayCommand<string>(SetFilter);
 
         _clipboardService.ContentChanged += ClipboardContentChanged;
+        _clipboardService.CaptureRejected += ClipboardCaptureRejected;
     }
 
     public ObservableCollection<ClipItem> Items => _items;
@@ -265,6 +266,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _visibleItems.Clear();
         _lastDeletedItem = null;
         CloseAllEditors();
+        UndoDeleteCommand.RaiseCanExecuteChanged();
+        OnPropertyChanged(nameof(CanUndoDelete));
         OnPropertyChanged(nameof(HasVisibleItems));
         OnPropertyChanged(nameof(EmptyStateTitle));
         OnPropertyChanged(nameof(EmptyStateDetail));
@@ -306,6 +309,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
 
         NotifyHistoryChanged();
+    }
+
+    private void ClipboardCaptureRejected(
+        object? sender,
+        ClipboardCaptureRejectedEventArgs eventArgs)
+    {
+        NotificationRequested?.Invoke(eventArgs.Message, false);
     }
 
     private void QueueCopy(ClipItem item, bool includeFormatting)
@@ -400,7 +410,20 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
-        EditingItem.UpdatePlainText(EditText);
+        var content = ClipContent.FromText(EditText);
+        var duplicate = _items.FirstOrDefault(
+            item => !ReferenceEquals(item, EditingItem)
+                && item.Signature == content.Signature);
+        if (duplicate is not null)
+        {
+            _items.Remove(EditingItem);
+            duplicate.Apply(content);
+        }
+        else
+        {
+            EditingItem.UpdatePlainText(EditText);
+        }
+
         CloseEditor();
         Resort();
         NotifyHistoryChanged();
@@ -470,10 +493,27 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         encoder.Frames.Add(BitmapFrame.Create(_workingImage));
         using var stream = new MemoryStream();
         encoder.Save(stream);
-        EditingImageItem.ReplaceImage(
-            stream.ToArray(),
+        var bytes = stream.ToArray();
+        var content = ClipContent.FromImage(
+            bytes,
             _workingImage.PixelWidth,
             _workingImage.PixelHeight);
+        var duplicate = _items.FirstOrDefault(
+            item => !ReferenceEquals(item, EditingImageItem)
+                && item.Signature == content.Signature);
+        if (duplicate is not null)
+        {
+            _items.Remove(EditingImageItem);
+            duplicate.Apply(content);
+        }
+        else
+        {
+            EditingImageItem.ReplaceImage(
+                bytes,
+                _workingImage.PixelWidth,
+                _workingImage.PixelHeight);
+        }
+
         CloseImageEditor();
         Resort();
         NotifyHistoryChanged();
@@ -521,9 +561,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
 
         var index = Math.Min(Math.Max(_lastDeletedIndex, 0), _items.Count);
-        _items.Insert(index, _lastDeletedItem);
+        var restoredItem = _lastDeletedItem;
+        _items.Insert(index, restoredItem);
         _lastDeletedItem = null;
-        TrimToLimit();
+        TrimToLimit(restoredItem);
         Resort();
         UndoDeleteCommand.RaiseCanExecuteChanged();
         OnPropertyChanged(nameof(CanUndoDelete));
@@ -608,10 +649,32 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         var query = SearchText.Trim();
         var matches = _items.Where(item => MatchesFilter(item, query)).ToList();
 
-        _visibleItems.Clear();
-        foreach (var item in matches)
+        for (var index = _visibleItems.Count - 1; index >= 0; index--)
         {
-            _visibleItems.Add(item);
+            if (!matches.Contains(_visibleItems[index]))
+            {
+                _visibleItems.RemoveAt(index);
+            }
+        }
+
+        for (var index = 0; index < matches.Count; index++)
+        {
+            var item = matches[index];
+            if (index < _visibleItems.Count
+                && ReferenceEquals(_visibleItems[index], item))
+            {
+                continue;
+            }
+
+            var existingIndex = _visibleItems.IndexOf(item);
+            if (existingIndex >= 0)
+            {
+                _visibleItems.Move(existingIndex, index);
+            }
+            else
+            {
+                _visibleItems.Insert(index, item);
+            }
         }
 
         OnPropertyChanged(nameof(HasVisibleItems));
@@ -682,6 +745,31 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         HistoryChanged?.Invoke(this, EventArgs.Empty);
     }
 
+    internal void ApplyExternalizedImages(HistorySaveResult result)
+    {
+        if (result.ExternalizedImages.Count == 0)
+        {
+            return;
+        }
+
+        var itemsById = new Dictionary<Guid, ClipItem>();
+        foreach (var item in _items)
+        {
+            itemsById[item.Id] = item;
+        }
+
+        foreach (var image in result.ExternalizedImages)
+        {
+            if (itemsById.TryGetValue(image.ItemId, out var item))
+            {
+                item.TryAttachExternalImage(
+                    image.ImagePath,
+                    image.Signature,
+                    image.InlineImagePngBase64);
+            }
+        }
+    }
+
     public void Dispose()
     {
         if (_disposed)
@@ -691,5 +779,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         _disposed = true;
         _clipboardService.ContentChanged -= ClipboardContentChanged;
+        _clipboardService.CaptureRejected -= ClipboardCaptureRejected;
     }
 }

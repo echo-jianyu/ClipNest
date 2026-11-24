@@ -8,6 +8,8 @@ internal sealed class FakeClipboardService : IClipboardService
 {
     public event EventHandler<ClipContent>? ContentChanged;
 
+    public event EventHandler<ClipboardCaptureRejectedEventArgs>? CaptureRejected;
+
     public List<(ClipItem Item, bool IncludeFormatting)> Copies { get; } = [];
 
     public bool CopyResult { get; set; } = true;
@@ -32,6 +34,13 @@ internal sealed class FakeClipboardService : IClipboardService
     public void Emit(ClipContent content)
     {
         ContentChanged?.Invoke(this, content);
+    }
+
+    public void Reject(string message)
+    {
+        CaptureRejected?.Invoke(
+            this,
+            new ClipboardCaptureRejectedEventArgs(message));
     }
 
     public void Dispose()

@@ -179,6 +179,24 @@ public sealed class ClipboardServiceTests
         Assert.False(ClipboardService.IsUsableClipboardImage(content));
     }
 
+    [Theory]
+    [InlineData("ExcludeClipboardContentFromMonitorProcessing", 1, true)]
+    [InlineData("Clipboard Viewer Ignore", 1, true)]
+    [InlineData("CanIncludeInClipboardHistory", 0, true)]
+    [InlineData("CanIncludeInClipboardHistory", 1, false)]
+    public void ShouldExcludeFromHistory_HonorsWindowsClipboardPrivacyFormats(
+        string format,
+        object value,
+        bool expected)
+    {
+        var dataObject = new StubDataObject();
+        dataObject.SetData(format, value);
+
+        Assert.Equal(
+            expected,
+            ClipboardService.ShouldExcludeFromHistory(dataObject));
+    }
+
     private static byte[] EncodePng(int width, int height, byte[] pixels)
     {
         var bitmap = BitmapSource.Create(
@@ -207,5 +225,71 @@ public sealed class ClipboardServiceTests
         bitmap.EndInit();
         bitmap.Freeze();
         return bitmap;
+    }
+
+    private sealed class StubDataObject : System.Windows.IDataObject
+    {
+        private readonly Dictionary<string, object?> _values =
+            new(StringComparer.OrdinalIgnoreCase);
+
+        public object? GetData(string format)
+        {
+            return GetData(format, true);
+        }
+
+        public object? GetData(string format, bool autoConvert)
+        {
+            return _values.TryGetValue(format, out var value) ? value : null;
+        }
+
+        public object? GetData(Type format)
+        {
+            return GetData(format.FullName ?? format.Name);
+        }
+
+        public bool GetDataPresent(string format)
+        {
+            return GetDataPresent(format, true);
+        }
+
+        public bool GetDataPresent(string format, bool autoConvert)
+        {
+            return _values.ContainsKey(format);
+        }
+
+        public bool GetDataPresent(Type format)
+        {
+            return GetDataPresent(format.FullName ?? format.Name);
+        }
+
+        public string[] GetFormats()
+        {
+            return GetFormats(true);
+        }
+
+        public string[] GetFormats(bool autoConvert)
+        {
+            return _values.Keys.ToArray();
+        }
+
+        public void SetData(string format, object? data)
+        {
+            SetData(format, data, true);
+        }
+
+        public void SetData(string format, object? data, bool autoConvert)
+        {
+            _values[format] = data;
+        }
+
+        public void SetData(object data)
+        {
+            SetData(data.GetType().FullName ?? data.GetType().Name, data);
+        }
+
+        public void SetData(Type format, object data)
+        {
+            SetData(format.FullName ?? format.Name, data);
+        }
     }
 }

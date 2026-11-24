@@ -65,7 +65,21 @@ public sealed class HotKeyDefinition : IEquatable<HotKeyDefinition>
             return false;
         }
 
-        return (modifiers & ~SupportedModifiers) == 0;
+        if ((modifiers & ~SupportedModifiers) != 0)
+        {
+            return false;
+        }
+
+        var isFunctionKey = virtualKey is >= 0x70 and <= 0x87;
+        var hasPrimaryModifier =
+            (modifiers & (ControlModifier | AltModifier | WindowsModifier)) != 0;
+        if (!hasPrimaryModifier
+            && !isFunctionKey)
+        {
+            return false;
+        }
+
+        return modifiers != ShiftModifier;
     }
 
     public static HotKeyDefinition FromSettings(AppSettings settings)

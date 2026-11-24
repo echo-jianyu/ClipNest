@@ -21,7 +21,7 @@ public partial class ConfirmWindow : Window
     {
         var dialog = new ConfirmWindow(
             "清空历史",
-            "此操作会去清空所有文字和图片记录，无法撤销，确定清空吗？",
+            "此操作会清空所有文字和图片记录，无法撤销，确定清空吗？",
             "清空历史");
         if (owner is not null)
         {

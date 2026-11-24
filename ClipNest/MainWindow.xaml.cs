@@ -31,6 +31,7 @@ public partial class MainWindow : Window, IDisposable
     private readonly DispatcherTimer _historySaveTimer;
     private readonly DispatcherTimer _placementSaveTimer;
     private readonly DispatcherTimer _toastTimer;
+    private readonly DispatcherTimer _cardCopyTimer;
     private readonly HotKeyDefinition _hotKey;
 
     private bool _disposed;
@@ -44,7 +45,6 @@ public partial class MainWindow : Window, IDisposable
     private bool _cardDragStartPointValid;
     private bool _isCardDragging;
     private ClipItem? _pendingCardCopyItem;
-    private bool _copyDispatchQueued;
     private ClipItem? _selectedItem;
     private bool _suppressCardClick;
     private bool _selectionRefreshQueued;
@@ -99,6 +99,13 @@ public partial class MainWindow : Window, IDisposable
         };
         _toastTimer.Tick += ToastTimer_Tick;
 
+        _cardCopyTimer = new DispatcherTimer(DispatcherPriority.Input)
+        {
+            Interval = TimeSpan.FromMilliseconds(
+                System.Windows.Forms.SystemInformation.DoubleClickTime)
+        };
+        _cardCopyTimer.Tick += CardCopyTimer_Tick;
+
         SourceInitialized += MainWindow_SourceInitialized;
         LocationChanged += MainWindow_PlacementChanged;
         SizeChanged += MainWindow_SizeChanged;
@@ -119,6 +126,24 @@ public partial class MainWindow : Window, IDisposable
             return;
         }
 
+        CancelPendingCardCopy();
+        CloseImagePreview();
+        if (_viewModel.IsSearchOpen)
+        {
+            _viewModel.CloseSearchCommand.Execute(null);
+        }
+
+        if (_viewModel.IsEditing)
+        {
+            _viewModel.CancelEditCommand.Execute(null);
+        }
+
+        if (_viewModel.IsEditingImage)
+        {
+            _viewModel.CancelImageEditCommand.Execute(null);
+        }
+
+        HideToastImmediately();
         Hide();
         _placementSaveTimer.Stop();
         _ = SavePlacementAsync();
@@ -169,9 +194,11 @@ public partial class MainWindow : Window, IDisposable
     public async Task FlushAsync()
     {
         _historySaveTimer.Stop();
+        _cardCopyTimer.Stop();
         _placementSaveTimer.Stop();
 
-        await _historyStore.SaveAsync(_viewModel.Items.ToList());
+        var result = await _historyStore.SaveAsync(_viewModel.Items.ToList());
+        _viewModel.ApplyExternalizedImages(result);
         await SavePlacementAsync();
     }
 
@@ -275,6 +302,7 @@ public partial class MainWindow : Window, IDisposable
             || _viewModel.IsEditing
             || _viewModel.IsEditingImage
             || _viewModel.IsSearchOpen
+            || ImagePreviewOverlay.Visibility == Visibility.Visible
             || Mouse.RightButton == MouseButtonState.Pressed)
         {
             return IntPtr.Zero;
@@ -366,7 +394,8 @@ public partial class MainWindow : Window, IDisposable
         _historySaveTimer.Stop();
         try
         {
-            await _historyStore.SaveAsync(_viewModel.Items.ToList());
+            var result = await _historyStore.SaveAsync(_viewModel.Items.ToList());
+            _viewModel.ApplyExternalizedImages(result);
         }
         catch (Exception exception) when (
             exception is IOException
@@ -453,7 +482,7 @@ public partial class MainWindow : Window, IDisposable
         }
         else
         {
-            ShowFromTray(activate: false);
+            ShowFromTray();
         }
     }
 
@@ -514,6 +543,7 @@ public partial class MainWindow : Window, IDisposable
         Width = nextWidth;
         Height = nextHeight;
         _isResizing = false;
+        ClampWindowToCurrentMonitor();
 
         _placementSaveTimer.Stop();
         _placementSaveTimer.Start();
@@ -596,10 +626,7 @@ public partial class MainWindow : Window, IDisposable
     private Point GetCursorScreenPositionInDips()
     {
         var screenPoint = PointToScreen(Mouse.GetPosition(this));
-        var dpi = VisualTreeHelper.GetDpi(this);
-        return new Point(
-            screenPoint.X / dpi.DpiScaleX,
-            screenPoint.Y / dpi.DpiScaleY);
+        return GetDeviceToDipTransform().Transform(screenPoint);
     }
 
     private void ClampWindowToCurrentMonitor()
@@ -633,16 +660,27 @@ public partial class MainWindow : Window, IDisposable
             if (monitor != IntPtr.Zero
                 && NativeMethods.GetMonitorInfo(monitor, ref info))
             {
-                var dpi = VisualTreeHelper.GetDpi(this);
-                return new Rect(
-                    info.Work.Left / dpi.DpiScaleX,
-                    info.Work.Top / dpi.DpiScaleY,
-                    info.Work.Width / dpi.DpiScaleX,
-                    info.Work.Height / dpi.DpiScaleY);
+                var transform = GetDeviceToDipTransform();
+                var topLeft = transform.Transform(new Point(
+                    info.Work.Left,
+                    info.Work.Top));
+                var bottomRight = transform.Transform(new Point(
+                    info.Work.Right,
+                    info.Work.Bottom));
+                return new Rect(topLeft, bottomRight);
             }
         }
 
         return SystemParameters.WorkArea;
+    }
+
+    private Matrix GetDeviceToDipTransform()
+    {
+        return PresentationSource
+            .FromVisual(this)
+            ?.CompositionTarget
+            ?.TransformFromDevice
+            ?? Matrix.Identity;
     }
 
     private void ClipItem_MouseLeftButtonDown(object sender, MouseButtonEventArgs eventArgs)
@@ -752,20 +790,18 @@ public partial class MainWindow : Window, IDisposable
     private void ScheduleCardCopy(ClipItem item)
     {
         _pendingCardCopyItem = item;
-        if (_copyDispatchQueued)
-        {
-            return;
-        }
+        _cardCopyTimer.Stop();
+        _cardCopyTimer.Start();
+    }
 
-        _copyDispatchQueued = true;
-        Dispatcher.BeginInvoke(
-            DispatcherPriority.Background,
-            new Action(CopyPendingCard));
+    private void CardCopyTimer_Tick(object? sender, EventArgs eventArgs)
+    {
+        _cardCopyTimer.Stop();
+        CopyPendingCard();
     }
 
     private void CopyPendingCard()
     {
-        _copyDispatchQueued = false;
         if (_disposed)
         {
             _pendingCardCopyItem = null;
@@ -782,6 +818,7 @@ public partial class MainWindow : Window, IDisposable
 
     private void CancelPendingCardCopy()
     {
+        _cardCopyTimer.Stop();
         _pendingCardCopyItem = null;
     }
 
@@ -845,15 +882,6 @@ public partial class MainWindow : Window, IDisposable
     {
         _viewModel.CloseSearchCommand.Execute(null);
         HistoryScrollViewer.Focus();
-    }
-
-    private void SearchFilter_Click(object sender, RoutedEventArgs eventArgs)
-    {
-        if (sender is FrameworkElement { Tag: string filter })
-        {
-            _viewModel.SetFilterCommand.Execute(filter);
-            eventArgs.Handled = true;
-        }
     }
 
     private void MoreButton_Click(object sender, RoutedEventArgs eventArgs)
@@ -979,7 +1007,6 @@ public partial class MainWindow : Window, IDisposable
     {
         if (_viewModel.IsEditing
             || _viewModel.IsEditingImage
-            || _viewModel.IsSearchOpen
             || Keyboard.FocusedElement is TextBoxBase
             || string.IsNullOrEmpty(eventArgs.Text))
         {
@@ -991,15 +1018,26 @@ public partial class MainWindow : Window, IDisposable
             return;
         }
 
-        var text = eventArgs.Text;
+        if (_viewModel.IsSearchOpen)
+        {
+            _viewModel.SearchText += eventArgs.Text;
+            eventArgs.Handled = true;
+            Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() =>
+            {
+                SearchTextBox.Focus();
+                SearchTextBox.CaretIndex = SearchTextBox.Text.Length;
+            }));
+            return;
+        }
+
         _viewModel.OpenSearchCommand.Execute(null);
+        _viewModel.SearchText = eventArgs.Text;
+        eventArgs.Handled = true;
         Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() =>
         {
             SearchTextBox.Focus();
-            _viewModel.SearchText = text;
             SearchTextBox.CaretIndex = SearchTextBox.Text.Length;
         }));
-        eventArgs.Handled = true;
     }
 
     private void SelectItem(ClipItem item)
@@ -1304,6 +1342,14 @@ public partial class MainWindow : Window, IDisposable
         ToastHost.BeginAnimation(OpacityProperty, animation);
     }
 
+    private void HideToastImmediately()
+    {
+        _toastTimer.Stop();
+        ToastHost.BeginAnimation(OpacityProperty, null);
+        ToastHost.Opacity = 0;
+        ToastHost.Visibility = Visibility.Collapsed;
+    }
+
     private void ToastTimer_Tick(object? sender, EventArgs eventArgs)
     {
         HideToast();
@@ -1368,6 +1414,7 @@ public partial class MainWindow : Window, IDisposable
         _historySaveTimer.Stop();
         _placementSaveTimer.Stop();
         _toastTimer.Stop();
+        _cardCopyTimer.Stop();
         CancelPendingCardCopy();
         _selectionRefreshQueued = false;
         _windowSource?.RemoveHook(WindowMessageHook);
@@ -1381,6 +1428,7 @@ public partial class MainWindow : Window, IDisposable
         _hotKeyService.Dispose();
         _clipboardService.Detach();
         _clipboardService.Dispose();
+        _settingsStore.Dispose();
     }
 
     public void Dispose()

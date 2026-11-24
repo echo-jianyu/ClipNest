@@ -25,6 +25,7 @@ public partial class App : System.Windows.Application, IDisposable
     private MainWindow? _mainWindow;
     private Forms.NotifyIcon? _trayIcon;
     private ContextMenu? _trayContextMenu;
+    private Window? _trayMenuAnchor;
     private Drawing.Icon? _trayDrawingIcon;
     private MenuItem? _showHideMenuItem;
     private MenuItem? _settingsMenuItem;
@@ -147,6 +148,8 @@ public partial class App : System.Windows.Application, IDisposable
             _trayContextMenu = null;
         }
 
+        _trayMenuAnchor?.Close();
+        _trayMenuAnchor = null;
         StopTrayMenuForegroundMonitor();
         _trayDrawingIcon?.Dispose();
         _trayDrawingIcon = null;
@@ -250,6 +253,7 @@ public partial class App : System.Windows.Application, IDisposable
         using var iconStream = iconResource.Stream;
         _trayDrawingIcon = new Drawing.Icon(iconStream);
 
+        _trayMenuAnchor = CreateTrayMenuAnchor();
         _trayContextMenu = CreateTrayContextMenu();
         _showHideMenuItem = CreateTrayMenuItem("隐藏");
         _showHideMenuItem.Click += (_, _) => ToggleWindowFromTray();
@@ -301,6 +305,28 @@ public partial class App : System.Windows.Application, IDisposable
         };
     }
 
+    private static Window CreateTrayMenuAnchor()
+    {
+        var anchor = new Window
+        {
+            Width = 1,
+            Height = 1,
+            Left = -32000,
+            Top = -32000,
+            Opacity = 0.01,
+            ShowActivated = false,
+            ShowInTaskbar = false,
+            WindowStyle = WindowStyle.None,
+            ResizeMode = ResizeMode.NoResize,
+            WindowStartupLocation = WindowStartupLocation.Manual,
+            Focusable = false,
+            IsHitTestVisible = false,
+            Background = System.Windows.Media.Brushes.Transparent
+        };
+        anchor.Show();
+        return anchor;
+    }
+
     private MenuItem CreateTrayMenuItem(string header)
     {
         return new MenuItem
@@ -312,13 +338,16 @@ public partial class App : System.Windows.Application, IDisposable
 
     private void ShowTrayContextMenu()
     {
-        if (_trayContextMenu is null)
+        if (_trayContextMenu is null || _trayMenuAnchor is null)
         {
             return;
         }
 
         UpdateTrayMenuState();
-        _trayContextMenu.PlacementTarget = null;
+        var handle = new System.Windows.Interop.WindowInteropHelper(
+            _trayMenuAnchor).Handle;
+        NativeMethods.SetForegroundWindow(handle);
+        _trayContextMenu.PlacementTarget = _trayMenuAnchor;
         _trayContextMenu.Placement = PlacementMode.MousePoint;
         _trayContextMenu.IsOpen = true;
     }

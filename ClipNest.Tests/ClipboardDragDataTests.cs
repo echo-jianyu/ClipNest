@@ -52,6 +52,38 @@ public sealed class ClipboardDragDataTests
         }
     }
 
+    [Fact]
+    public void BuildDragDataObject_UsesTemporaryFileInsteadOfHistoryImage()
+    {
+        var directory = Path.Combine(
+            Path.GetTempPath(),
+            $"ClipNest.DragSource.{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var sourcePath = Path.Combine(directory, "history.png");
+        var pngBytes = EncodePng();
+        File.WriteAllBytes(sourcePath, pngBytes);
+
+        try
+        {
+            var item = ClipItem.Create(ClipContent.FromImage(pngBytes, 2, 2));
+            item.AttachImageFile(sourcePath, notify: false);
+
+            var dataObject = ClipboardService.BuildDragDataObject(item);
+            var files = Assert.IsType<string[]>(
+                dataObject.GetData(DataFormats.FileDrop));
+            var dragPath = Assert.Single(files);
+
+            Assert.NotEqual(sourcePath, dragPath);
+            Assert.Equal(pngBytes, File.ReadAllBytes(dragPath));
+            Assert.True(File.Exists(sourcePath));
+            File.Delete(dragPath);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     private static byte[] EncodePng()
     {
         var pixels = new byte[]

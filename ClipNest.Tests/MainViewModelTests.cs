@@ -27,6 +27,23 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
+    public void RejectedOversizedClipboardText_ShowsNotificationWithoutAddingHistory()
+    {
+        using var clipboard = new FakeClipboardService();
+        using var viewModel = new MainViewModel(clipboard, []);
+        var notifications = new List<(string Message, bool CanUndo)>();
+        viewModel.NotificationRequested += (message, canUndo) =>
+            notifications.Add((message, canUndo));
+
+        clipboard.Reject("oversized");
+
+        Assert.Empty(viewModel.Items);
+        Assert.Equal(
+            (Message: "oversized", CanUndo: false),
+            Assert.Single(notifications));
+    }
+
+    [Fact]
     public void DuplicateClipboardContent_UpdatesExistingItemAndMovesItToTop()
     {
         using var clipboard = new FakeClipboardService();
@@ -117,6 +134,24 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
+    public void EditingTextToExistingContent_MergesDuplicateRecords()
+    {
+        using var clipboard = new FakeClipboardService();
+        using var viewModel = new MainViewModel(clipboard, []);
+        clipboard.Emit(ClipContent.FromText("alpha"));
+        clipboard.Emit(ClipContent.FromText("beta"));
+        var alpha = viewModel.Items.Single(item => item.PlainText == "alpha");
+
+        viewModel.EditCommand.Execute(alpha);
+        viewModel.EditText = "beta";
+        viewModel.SaveEditCommand.Execute(null);
+
+        var remaining = Assert.Single(viewModel.Items);
+        Assert.Equal("beta", remaining.PlainText);
+        Assert.Equal(remaining, viewModel.Items[0]);
+    }
+
+    [Fact]
     public void DeleteAndUndo_RestoresDeletedRecord()
     {
         using var clipboard = new FakeClipboardService();
@@ -135,6 +170,25 @@ public sealed class MainViewModelTests
         Assert.Equal(2, viewModel.Items.Count);
         Assert.Contains(beta, viewModel.Items);
         Assert.False(viewModel.CanUndoDelete);
+    }
+
+    [Fact]
+    public void UndoDelete_IsProtectedWhenHistoryIsAlreadyAtLimit()
+    {
+        using var clipboard = new FakeClipboardService();
+        using var viewModel = new MainViewModel(clipboard, []);
+        for (var index = 0; index < MainViewModel.HistoryLimit; index++)
+        {
+            clipboard.Emit(ClipContent.FromText($"record-{index}"));
+        }
+
+        var deleted = viewModel.Items[viewModel.Items.Count - 1];
+        viewModel.DeleteCommand.Execute(deleted);
+        clipboard.Emit(ClipContent.FromText("replacement"));
+        viewModel.UndoDeleteCommand.Execute(null);
+
+        Assert.Equal(MainViewModel.HistoryLimit, viewModel.Items.Count);
+        Assert.Contains(deleted, viewModel.Items);
     }
 
     [Fact]
@@ -174,6 +228,22 @@ public sealed class MainViewModelTests
         Assert.Equal(200, image.PixelWidth);
         Assert.Equal(400, image.PixelHeight);
         Assert.False(AdaptiveCardPanel.ShouldSpanColumns(image, 210, 2));
+    }
+
+    [Fact]
+    public void SavingAnImageEditThatMatchesExistingHistory_MergesDuplicates()
+    {
+        using var clipboard = new FakeClipboardService();
+        var bytes = EncodePng(40, 20);
+        var edited = ClipItem.Create(ClipContent.FromImage(bytes, 40, 20));
+        var existing = ClipItem.Create(ClipContent.FromImage(bytes, 40, 20));
+        using var viewModel = new MainViewModel(clipboard, [edited, existing]);
+
+        viewModel.EditCommand.Execute(edited);
+        viewModel.SaveImageEditCommand.Execute(null);
+
+        var remaining = Assert.Single(viewModel.Items);
+        Assert.Same(existing, remaining);
     }
 
     [Fact]
@@ -258,6 +328,8 @@ public sealed class MainViewModelTests
 
         Assert.Empty(viewModel.Items);
         Assert.False(viewModel.HasItems);
+        Assert.False(viewModel.CanUndoDelete);
+        Assert.False(viewModel.UndoDeleteCommand.CanExecute(null));
     }
 
     [Fact]

@@ -20,6 +20,8 @@ public sealed class ClipItem : ObservableObject
     private int _displayTextLimit = DefaultDisplayTextLimit;
     private double _displayFontSize = DefaultDisplayFontSize;
     private string _plainText = string.Empty;
+    private string _displayText = string.Empty;
+    private string _tooltipText = string.Empty;
     private string? _rtf;
     private string? _html;
     private string? _imagePngBase64;
@@ -42,6 +44,7 @@ public sealed class ClipItem : ObservableObject
         {
             if (SetProperty(ref _plainText, value))
             {
+                RefreshPreviewText();
                 OnPropertyChanged(nameof(DisplayText));
                 OnPropertyChanged(nameof(TooltipText));
             }
@@ -111,18 +114,7 @@ public sealed class ClipItem : ObservableObject
 
     public string DisplayText
     {
-        get
-        {
-            if (Kind == ClipContentKind.Image)
-            {
-                return "图片";
-            }
-
-            var normalized = WhitespaceRegex.Replace(PlainText, " ").Trim();
-            return normalized.Length <= DisplayTextLimit
-                ? normalized
-                : $"{normalized.Substring(0, DisplayTextLimit)}…";
-        }
+        get => _displayText;
     }
 
     public int DisplayTextLimit
@@ -132,6 +124,7 @@ public sealed class ClipItem : ObservableObject
         {
             if (SetProperty(ref _displayTextLimit, value))
             {
+                RefreshPreviewText();
                 OnPropertyChanged(nameof(DisplayText));
             }
         }
@@ -153,17 +146,7 @@ public sealed class ClipItem : ObservableObject
 
     public string TooltipText
     {
-        get
-        {
-            if (Kind == ClipContentKind.Image)
-            {
-                return "图片";
-            }
-
-            return PlainText.Length <= 2000
-                ? PlainText
-                : $"{PlainText.Substring(0, 2000)}…";
-        }
+        get => _tooltipText;
     }
 
     public string PinLabel => Pinned ? "取消置顶" : "置顶";
@@ -217,6 +200,22 @@ public sealed class ClipItem : ObservableObject
 
         _imagePngBase64 = null;
         _imageFilePath = imageFilePath;
+    }
+
+    internal bool TryAttachExternalImage(
+        string imageFilePath,
+        string expectedSignature,
+        string expectedInlineBase64)
+    {
+        if (Kind != ClipContentKind.Image
+            || !string.Equals(Signature, expectedSignature, StringComparison.Ordinal)
+            || !ReferenceEquals(_imagePngBase64, expectedInlineBase64))
+        {
+            return false;
+        }
+
+        SetImageStorage(null, imageFilePath);
+        return true;
     }
 
     internal void ApplyDisplaySettings(int textLimit, double fontSize)
@@ -307,6 +306,7 @@ public sealed class ClipItem : ObservableObject
             null);
         PixelWidth = content.PixelWidth;
         PixelHeight = content.PixelHeight;
+        RefreshPreviewText();
         UpdatedAt = DateTimeOffset.Now;
         Sequence = NextSequence();
         OnPropertyChanged(nameof(UpdatedAt));
@@ -378,6 +378,24 @@ public sealed class ClipItem : ObservableObject
         ResetImagePreview();
         OnPropertyChanged(nameof(ImagePngBase64));
         OnPropertyChanged(nameof(ImagePreview));
+    }
+
+    private void RefreshPreviewText()
+    {
+        if (Kind == ClipContentKind.Image)
+        {
+            _displayText = "图片";
+            _tooltipText = "图片";
+            return;
+        }
+
+        var normalized = WhitespaceRegex.Replace(PlainText, " ").Trim();
+        _displayText = normalized.Length <= DisplayTextLimit
+            ? normalized
+            : $"{normalized.Substring(0, DisplayTextLimit)}…";
+        _tooltipText = PlainText.Length <= 2000
+            ? PlainText
+            : $"{PlainText.Substring(0, 2000)}…";
     }
 
     private void BeginImagePreviewLoad()
@@ -483,7 +501,7 @@ public sealed class ClipItem : ObservableObject
         OnPropertyChanged(nameof(ImagePreview));
     }
 
-    private static BitmapImage? DecodeThumbnail(byte[]? bytes)
+    internal static BitmapImage? DecodeThumbnail(byte[]? bytes)
     {
         if (bytes is null || bytes.Length == 0)
         {
@@ -493,10 +511,28 @@ public sealed class ClipItem : ObservableObject
         try
         {
             using var stream = new MemoryStream(bytes, writable: false);
+            var frame = BitmapFrame.Create(
+                stream,
+                BitmapCreateOptions.PreservePixelFormat,
+                BitmapCacheOption.OnLoad);
+            var longestSide = Math.Max(frame.PixelWidth, frame.PixelHeight);
+            var decodeWidth = longestSide > 640
+                ? Math.Max(1, (int)Math.Round(frame.PixelWidth * (640d / longestSide)))
+                : 0;
+
+            if (stream.CanSeek)
+            {
+                stream.Position = 0;
+            }
+
             var bitmap = new BitmapImage();
             bitmap.BeginInit();
             bitmap.CacheOption = BitmapCacheOption.OnLoad;
-            bitmap.DecodePixelWidth = 640;
+            if (decodeWidth > 0)
+            {
+                bitmap.DecodePixelWidth = decodeWidth;
+            }
+
             bitmap.StreamSource = stream;
             bitmap.EndInit();
             bitmap.Freeze();
