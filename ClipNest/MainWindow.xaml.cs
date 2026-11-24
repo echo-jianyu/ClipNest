@@ -813,7 +813,7 @@ public partial class MainWindow : Window, IDisposable
 
     private void UpdateHotKeyUi()
     {
-        HotKeyConflictIndicator.Visibility = _hotKeyAvailable
+        HotKeyConflictDot.Visibility = _hotKeyAvailable
             ? Visibility.Collapsed
             : Visibility.Visible;
         HideButton.ToolTip = $"隐藏 ({_hotKeyService.CurrentHotKey.DisplayText})";

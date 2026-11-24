@@ -110,11 +110,12 @@ public sealed class HotKeyService : IDisposable
 
     private bool TryRegister(HotKeyDefinition hotKey)
     {
-        return NativeMethods.RegisterHotKey(
+        _registered = NativeMethods.RegisterHotKey(
             _windowHandle,
             HotKeyId,
             hotKey.Modifiers | NativeMethods.ModNoRepeat,
             hotKey.VirtualKey);
+        return _registered;
     }
 
     private IntPtr WindowMessageHook(
