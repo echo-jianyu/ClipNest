@@ -214,7 +214,6 @@ public sealed class MainViewModelTests
             200));
         var image = viewModel.Items[0];
 
-        Assert.True(AdaptiveCardPanel.ShouldSpanColumns(image, 210, 2));
         Assert.True(viewModel.EditCommand.CanExecute(image));
         viewModel.EditCommand.Execute(image);
         Assert.True(viewModel.IsEditingImage);
@@ -227,7 +226,6 @@ public sealed class MainViewModelTests
         Assert.NotNull(image.ImagePngBase64);
         Assert.Equal(200, image.PixelWidth);
         Assert.Equal(400, image.PixelHeight);
-        Assert.False(AdaptiveCardPanel.ShouldSpanColumns(image, 210, 2));
     }
 
     [Fact]

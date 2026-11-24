@@ -209,7 +209,7 @@
                 <Grid Grid.Row="2">
                     <ScrollViewer
                         x:Name="HistoryScrollViewer"
-                        Padding="2,1,1,1"
+                        Padding="0"
                         Focusable="False"
                         HorizontalScrollBarVisibility="Disabled"
                         VerticalScrollBarVisibility="Auto">
@@ -225,7 +225,7 @@
                                 <DataTemplate>
                                     <Border
                                         x:Name="ItemCard"
-                                        Margin="2,1"
+                                        Margin="0"
                                         Cursor="Hand"
                                         MouseLeftButtonDown="ClipItem_MouseLeftButtonDown"
                                         MouseLeftButtonUp="ClipItem_MouseLeftButtonUp"
@@ -268,7 +268,7 @@
 
                                             <Grid
                                                 x:Name="TextLayout"
-                                                Margin="14,4,10,4">
+                                                Margin="13,9,10,9">
                                                 <TextBlock
                                                     MaxHeight="114"
                                                     VerticalAlignment="Center"
@@ -284,6 +284,7 @@
                                             <Grid
                                                 x:Name="ImageLayout"
                                                 Margin="6"
+                                                MaxHeight="208"
                                                 ToolTip="双击查看大图"
                                                 Visibility="Collapsed">
                                                 <Border

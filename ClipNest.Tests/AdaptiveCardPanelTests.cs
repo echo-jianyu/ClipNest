@@ -10,116 +10,174 @@ public sealed class AdaptiveCardPanelTests
 {
     [Theory]
     [InlineData(280, 1)]
-    [InlineData(450, 2)]
-    [InlineData(720, 3)]
+    [InlineData(450, 1)]
+    [InlineData(519, 1)]
+    [InlineData(520, 2)]
+    [InlineData(779, 2)]
+    [InlineData(780, 3)]
+    [InlineData(900, 3)]
     public void ColumnCount_AdaptsToAvailableWidth(int width, int expected)
     {
         Assert.Equal(expected, AdaptiveCardPanel.GetColumnCount(width));
     }
 
     [Fact]
-    public void LongText_SpansColumnsWhenNotPinned()
+    public void SingleColumn_AllCardsUseTheFullWidth()
     {
-        var item = ClipItem.Create(ClipContent.FromText(new string('a', 120)));
+        RunOnSta(() =>
+        {
+            var panel = new AdaptiveCardPanel();
+            var first = CreateCard(ClipItem.Create(ClipContent.FromText("first")), 40);
+            var second = CreateCard(ClipItem.Create(ClipContent.FromText("second")), 40);
+            panel.Children.Add(first);
+            panel.Children.Add(second);
 
-        Assert.True(AdaptiveCardPanel.ShouldSpanColumns(item, 210, 2));
+            Arrange(panel, 450);
 
-        item.Pinned = true;
-        Assert.False(AdaptiveCardPanel.ShouldSpanColumns(item, 210, 2));
+            Assert.Equal(450, first.ActualWidth);
+            Assert.Equal(450, second.ActualWidth);
+            Assert.Equal(0, first.TranslatePoint(new Point(0, 0), panel).X);
+            Assert.Equal(0, second.TranslatePoint(new Point(0, 0), panel).X);
+            Assert.Equal(47, second.TranslatePoint(new Point(0, 0), panel).Y);
+        });
     }
 
     [Fact]
-    public void LandscapeAndPortraitImagesChooseDifferentSpans()
+    public void TwoColumns_UseEqualWidthsAndNeverCreateSpanRows()
     {
-        var landscape = ClipItem.Create(ClipContent.FromImage([1], 1600, 600));
-        var portrait = ClipItem.Create(ClipContent.FromImage([1], 600, 1600));
+        RunOnSta(() =>
+        {
+            var panel = new AdaptiveCardPanel();
+            var longText = ClipItem.Create(ClipContent.FromText(new string('字', 120)));
+            var shortText = ClipItem.Create(ClipContent.FromText("short"));
+            var thirdText = ClipItem.Create(ClipContent.FromText("third"));
+            var first = CreateCard(longText, 100);
+            var second = CreateCard(shortText, 40);
+            var third = CreateCard(thirdText, 40);
+            panel.Children.Add(first);
+            panel.Children.Add(second);
+            panel.Children.Add(third);
 
-        Assert.True(AdaptiveCardPanel.ShouldSpanColumns(landscape, 210, 2));
-        Assert.False(AdaptiveCardPanel.ShouldSpanColumns(portrait, 210, 2));
+            Arrange(panel, 600);
+
+            Assert.Equal(296.5, first.ActualWidth, precision: 3);
+            Assert.Equal(296.5, second.ActualWidth, precision: 3);
+            Assert.Equal(296.5, third.ActualWidth, precision: 3);
+            Assert.Equal(0, first.TranslatePoint(new Point(0, 0), panel).X);
+            Assert.Equal(303.5, second.TranslatePoint(new Point(0, 0), panel).X, precision: 3);
+            Assert.Equal(303.5, third.TranslatePoint(new Point(0, 0), panel).X, precision: 3);
+            Assert.Equal(47, third.TranslatePoint(new Point(0, 0), panel).Y);
+        });
     }
 
     [Fact]
-    public void ImageHeight_UsesAspectRatioAndStaysBounded()
-    {
-        var landscape = ClipItem.Create(ClipContent.FromImage([1], 1600, 600));
-        var portrait = ClipItem.Create(ClipContent.FromImage([1], 600, 1600));
-
-        var landscapeHeight = AdaptiveCardPanel.CalculateCardHeight(landscape, 420);
-        var portraitHeight = AdaptiveCardPanel.CalculateCardHeight(portrait, 210);
-
-        Assert.InRange(landscapeHeight, 96, 250);
-        Assert.InRange(portraitHeight, 96, 250);
-        Assert.True(portraitHeight > landscapeHeight);
-    }
-
-    [Fact]
-    public void SmallLandscapeImage_DoesNotGrowBeyondNaturalDimensions()
-    {
-        var item = ClipItem.Create(ClipContent.FromImage([1], 266, 125));
-
-        Assert.True(AdaptiveCardPanel.ShouldSpanColumns(item, 210, 2));
-        var width = AdaptiveCardPanel.CalculateCardWidth(item, 436);
-        var height = AdaptiveCardPanel.CalculateCardHeight(item, width);
-
-        Assert.Equal(278, width);
-        Assert.Equal(137, height);
-        Assert.Equal(item.PixelWidth, width - 12);
-        Assert.Equal(item.PixelHeight, height - 12);
-    }
-
-    [Fact]
-    public void ImageThatFitsOneColumn_DoesNotSpanOrStretchToColumnWidth()
-    {
-        var item = ClipItem.Create(ClipContent.FromImage([1], 180, 72));
-
-        Assert.False(AdaptiveCardPanel.ShouldSpanColumns(item, 210, 2));
-        Assert.Equal(192, AdaptiveCardPanel.CalculateCardWidth(item, 210));
-    }
-
-    [Fact]
-    public void WideImageCard_SpansFromTheLeftEdge()
+    public void ShortTextCard_ClampsToCompactMinimumHeight()
     {
         RunOnSta(() =>
         {
             var panel = new AdaptiveCardPanel();
             var card = new Border
             {
-                DataContext = ClipItem.Create(ClipContent.FromImage([1], 266, 125))
+                DataContext = ClipItem.Create(ClipContent.FromText("short")),
+                Child = new TextBlock
+                {
+                    Text = "short",
+                    FontSize = ClipItem.DefaultDisplayFontSize
+                }
             };
             panel.Children.Add(card);
 
-            panel.Measure(new Size(450, 300));
-            panel.Arrange(new Rect(0, 0, 450, 300));
+            Arrange(panel, 450);
 
-            Assert.Equal(0, card.TranslatePoint(new Point(0, 0), panel).X);
-            Assert.Equal(278, card.ActualWidth);
+            Assert.Equal(40, card.ActualHeight);
         });
     }
 
     [Fact]
-    public void TextHeight_GrowsWithPreviewLength()
+    public void WrappedTextCard_UsesMeasuredContentHeight()
     {
-        var shortText = ClipItem.Create(ClipContent.FromText("short"));
-        var mediumText = ClipItem.Create(ClipContent.FromText(
-            string.Join(" ", Enumerable.Repeat("medium", 10))));
+        RunOnSta(() =>
+        {
+            var item = ClipItem.Create(ClipContent.FromText(new string('字', 120)));
+            var panel = new AdaptiveCardPanel();
+            var card = new Border
+            {
+                DataContext = item,
+                Child = new TextBlock
+                {
+                    Text = item.DisplayText,
+                    FontSize = item.DisplayFontSize,
+                    LineHeight = item.DisplayLineHeight,
+                    TextWrapping = TextWrapping.Wrap
+                }
+            };
+            panel.Children.Add(card);
 
-        var shortHeight = AdaptiveCardPanel.CalculateCardHeight(shortText, 210);
-        var mediumHeight = AdaptiveCardPanel.CalculateCardHeight(mediumText, 210);
+            Arrange(panel, 280);
 
-        Assert.True(mediumHeight > shortHeight);
+            Assert.True(card.ActualHeight > 40);
+        });
     }
 
     [Fact]
-    public void TextHeight_RespectsConfiguredFontSize()
+    public void NarrowImageCard_FrameFillsTheWholeColumn()
     {
-        var small = ClipItem.Create(ClipContent.FromText(new string('a', 60)));
-        var large = ClipItem.Create(ClipContent.FromText(new string('a', 60)));
-        small.ApplyDisplaySettings(40, 11);
-        large.ApplyDisplaySettings(40, 18);
+        RunOnSta(() =>
+        {
+            var panel = new AdaptiveCardPanel();
+            var card = new Border
+            {
+                DataContext = ClipItem.Create(ClipContent.FromImage([1], 180, 72)),
+                Child = new Border
+                {
+                    Width = 100,
+                    Height = 50
+                }
+            };
+            panel.Children.Add(card);
 
-        Assert.True(
-            AdaptiveCardPanel.CalculateCardHeight(large, 210)
-            > AdaptiveCardPanel.CalculateCardHeight(small, 210));
+            Arrange(panel, 450);
+
+            Assert.Equal(450, card.ActualWidth);
+        });
+    }
+
+    [Fact]
+    public void TallImageCard_HeightIsBounded()
+    {
+        RunOnSta(() =>
+        {
+            var panel = new AdaptiveCardPanel();
+            var card = new Border
+            {
+                DataContext = ClipItem.Create(ClipContent.FromImage([1], 600, 3000)),
+                Child = new Border
+                {
+                    Height = 1000
+                }
+            };
+            panel.Children.Add(card);
+
+            Arrange(panel, 450);
+
+            Assert.Equal(220, card.ActualHeight);
+        });
+    }
+
+    private static Border CreateCard(ClipItem item, double height)
+    {
+        return new Border
+        {
+            DataContext = item,
+            Height = height
+        };
+    }
+
+    private static void Arrange(AdaptiveCardPanel panel, double width)
+    {
+        panel.Measure(new Size(width, double.PositiveInfinity));
+        panel.Arrange(new Rect(0, 0, width, panel.DesiredSize.Height));
+        panel.UpdateLayout();
     }
 
     private static void RunOnSta(Action action)

@@ -8,83 +8,41 @@ namespace ClipNest.Controls;
 public sealed class AdaptiveCardPanel : Panel
 {
     private const double Gap = 7;
-    private const double ImageCardInset = 12;
-    private const double MinimumImageCardWidth = 64;
+    private const double MinimumTextCardHeight = 40;
+    private const double MinimumImageCardHeight = 48;
+    private const double MaximumImageCardHeight = 220;
     private readonly List<CardPlacement> _placements = [];
     private readonly Dictionary<UIElement, ClipItem> _observedItems = [];
 
     internal static int GetColumnCount(double width)
     {
-        if (width >= 720)
+        if (width >= 780)
         {
             return 3;
         }
 
-        return width >= 300 ? 2 : 1;
+        return width >= 520 ? 2 : 1;
     }
 
-    internal static bool ShouldSpanColumns(
-        ClipItem item,
-        double columnWidth,
-        int columnCount)
+    private static double MeasureCard(
+        UIElement child,
+        double cardWidth,
+        bool isImage)
     {
-        if (item.Pinned || columnCount <= 1)
-        {
-            return false;
-        }
+        var availableHeight = isImage
+            ? MaximumImageCardHeight
+            : double.PositiveInfinity;
+        child.Measure(new Size(cardWidth, availableHeight));
 
-        if (item.IsImage)
-        {
-            return item.PixelHeight > 0
-                && (double)item.PixelWidth / item.PixelHeight >= 1.6
-                && item.PixelWidth + ImageCardInset > columnWidth;
-        }
-
-        var textLength = NormalizeText(item.PlainText).Length;
-        var threshold = columnWidth >= 260 ? 90 : 58;
-        return textLength > threshold;
-    }
-
-    internal static double CalculateCardWidth(ClipItem item, double availableWidth)
-    {
-        if (!item.IsImage || item.PixelWidth <= 0)
-        {
-            return availableWidth;
-        }
-
-        return Math.Min(
-            availableWidth,
-            Math.Max(MinimumImageCardWidth, item.PixelWidth + ImageCardInset));
-    }
-
-    internal static double CalculateCardHeight(ClipItem item, double cardWidth)
-    {
-        if (item.IsImage)
-        {
-            var aspect = item.PixelWidth > 0 && item.PixelHeight > 0
-                ? (double)item.PixelWidth / item.PixelHeight
-                : 1.5;
-            var displayWidth = Math.Max(
-                1,
-                Math.Min(item.PixelWidth, cardWidth - ImageCardInset));
-            var displayHeight = displayWidth / aspect;
-            return Math.Min(
-                250,
-                Math.Max(48, displayHeight + ImageCardInset));
-        }
-
-        var charactersPerLine = Math.Max(
-            8,
-            (int)(cardWidth / Math.Max(1, item.DisplayFontSize * 1.04)));
-        var textLength = Math.Max(1, item.DisplayText.Length);
-        var lineCount = Math.Min(
-            6,
-            Math.Max(1, (int)Math.Ceiling((double)textLength / charactersPerLine)));
-        return Math.Min(
-            140,
-            Math.Max(
-                48,
-                25 + (lineCount * Math.Max(15, item.DisplayLineHeight))));
+        var minimumHeight = isImage
+            ? MinimumImageCardHeight
+            : MinimumTextCardHeight;
+        var measuredHeight = Math.Max(minimumHeight, child.DesiredSize.Height);
+        var finalHeight = isImage
+            ? Math.Min(measuredHeight, MaximumImageCardHeight)
+            : measuredHeight;
+        child.Measure(new Size(cardWidth, finalHeight));
+        return finalHeight;
     }
 
     protected override Size MeasureOverride(Size availableSize)
@@ -109,46 +67,21 @@ public sealed class AdaptiveCardPanel : Panel
         foreach (UIElement child in InternalChildren)
         {
             var item = (child as FrameworkElement)?.DataContext as ClipItem;
-            var spansColumns = item is not null
-                && ShouldSpanColumns(item, columnWidth, columnCount);
-            var availableCardWidth = spansColumns ? width : columnWidth;
-            var cardWidth = item is not null
-                ? CalculateCardWidth(item, availableCardWidth)
-                : availableCardWidth;
-            var cardHeight = item is not null
-                ? CalculateCardHeight(item, cardWidth)
-                : 48;
+            var cardHeight = MeasureCard(
+                child,
+                columnWidth,
+                item?.IsImage == true);
+            var column = FindShortestColumn(columnHeights);
+            var top = columnHeights[column];
+            var left = column * (columnWidth + Gap);
 
-            int column;
-            double top;
-            double left;
-            if (spansColumns)
-            {
-                column = 0;
-                top = columnHeights.Max();
-                left = 0;
-            }
-            else
-            {
-                column = FindShortestColumn(columnHeights);
-                top = columnHeights[column];
-                left = column * (columnWidth + Gap);
-            }
-
-            child.Measure(new Size(cardWidth, cardHeight));
-            _placements.Add(new CardPlacement(child, left, top, cardWidth, cardHeight));
-
-            if (spansColumns)
-            {
-                for (var index = 0; index < columnCount; index++)
-                {
-                    columnHeights[index] = top + cardHeight + Gap;
-                }
-            }
-            else
-            {
-                columnHeights[column] = top + cardHeight + Gap;
-            }
+            _placements.Add(new CardPlacement(
+                child,
+                left,
+                top,
+                columnWidth,
+                cardHeight));
+            columnHeights[column] = top + cardHeight + Gap;
         }
 
         var height = Math.Max(0, columnHeights.Max() - Gap);
@@ -237,6 +170,7 @@ public sealed class AdaptiveCardPanel : Panel
     {
         if (eventArgs.PropertyName is nameof(ClipItem.PixelWidth)
             or nameof(ClipItem.PixelHeight)
+            or nameof(ClipItem.ImagePreview)
             or nameof(ClipItem.DisplayText)
             or nameof(ClipItem.DisplayFontSize)
             or nameof(ClipItem.PlainText)
@@ -245,13 +179,6 @@ public sealed class AdaptiveCardPanel : Panel
         {
             InvalidateMeasure();
         }
-    }
-
-    private static string NormalizeText(string text)
-    {
-        return string.Join(
-            " ",
-            text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
     }
 
     private sealed class CardPlacement

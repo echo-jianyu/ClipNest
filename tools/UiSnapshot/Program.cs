@@ -81,19 +81,23 @@ internal static class Program
             new AutoStartService(Path.Combine(tempDirectory, "ClipNest.exe")),
             new AppSettings());
 
-        clipboard.Emit(ClipContent.FromText("把灵感收进 ClipNest，需要时随手取用。"));
+        clipboard.Emit(ClipContent.FromText("https://github.com/"));
         clipboard.Emit(ClipContent.FromText(
             "窗口支持任意拖动、双击隐藏，F4 随时唤醒。",
             @"{\rtf1\ansi ClipNest}",
             "<b>ClipNest</b>"));
-        clipboard.Emit(ClipContent.FromText(
-            "dotnet publish ClipNest -p:PublishProfile=FrameworkDependent-Windows -c Release",
-            @"{\rtf1\ansi dotnet publish}",
-            "<code>dotnet publish</code>"));
+        clipboard.Emit(ClipContent.FromImage(CreatePortraitSampleImage(), 160, 260));
         clipboard.Emit(ClipContent.FromImage(CreateSampleImage(), 320, 200));
-        clipboard.Emit(ClipContent.FromText("https://github.com/"));
-        clipboard.Emit(ClipContent.FromText("第五项：紧凑视口默认展示最近五条记录。"));
-        viewModel.TogglePinCommand.Execute(viewModel.Items[2]);
+        clipboard.Emit(ClipContent.FromText("dotnet test ClipNest.slnx -c Release"));
+        clipboard.Emit(ClipContent.FromText("收到，稍后回复。"));
+        clipboard.Emit(ClipContent.FromText(
+            """
+            SELECT project_id, COUNT(*) AS clip_count
+            FROM clipboard_history
+            WHERE captured_at >= CURRENT_DATE - INTERVAL '7 days'
+            GROUP BY project_id
+            ORDER BY clip_count DESC;
+            """));
 
         if (editMode)
         {
@@ -250,6 +254,50 @@ internal static class Program
         }
 
         var bitmap = new RenderTargetBitmap(320, 200, 96, 96, PixelFormats.Pbgra32);
+        bitmap.Render(visual);
+
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        using var stream = new MemoryStream();
+        encoder.Save(stream);
+        return stream.ToArray();
+    }
+
+    private static byte[] CreatePortraitSampleImage()
+    {
+        var visual = new DrawingVisual();
+        using (var context = visual.RenderOpen())
+        {
+            context.DrawRoundedRectangle(
+                new SolidColorBrush(Color.FromRgb(247, 245, 239)),
+                null,
+                new Rect(0, 0, 160, 260),
+                18,
+                18);
+            context.DrawRoundedRectangle(
+                new SolidColorBrush(Color.FromRgb(23, 109, 105)),
+                null,
+                new Rect(24, 28, 112, 86),
+                14,
+                14);
+            context.DrawEllipse(
+                new SolidColorBrush(Color.FromRgb(223, 96, 73)),
+                null,
+                new Point(80, 172),
+                42,
+                42);
+            var text = new FormattedText(
+                "PORTRAIT",
+                System.Globalization.CultureInfo.InvariantCulture,
+                FlowDirection.LeftToRight,
+                new Typeface("Segoe UI"),
+                15,
+                Brushes.White,
+                96);
+            context.DrawText(text, new Point(32, 62));
+        }
+
+        var bitmap = new RenderTargetBitmap(160, 260, 96, 96, PixelFormats.Pbgra32);
         bitmap.Render(visual);
 
         var encoder = new PngBitmapEncoder();
