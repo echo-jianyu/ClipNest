@@ -14,16 +14,6 @@ public sealed class AdaptiveCardPanel : Panel
     private readonly List<CardPlacement> _placements = [];
     private readonly Dictionary<UIElement, ClipItem> _observedItems = [];
 
-    internal static int GetColumnCount(double width)
-    {
-        if (width >= 780)
-        {
-            return 3;
-        }
-
-        return width >= 520 ? 2 : 1;
-    }
-
     private static double MeasureCard(
         UIElement child,
         double cardWidth,
@@ -58,11 +48,8 @@ public sealed class AdaptiveCardPanel : Panel
             || availableSize.Width <= 0
             ? 450
             : availableSize.Width;
-        var columnCount = GetColumnCount(width);
-        var columnWidth = Math.Max(
-            1,
-            (width - (Gap * (columnCount - 1))) / columnCount);
-        var columnHeights = new double[columnCount];
+        var columnWidth = Math.Max(1, width);
+        var top = 0d;
 
         foreach (UIElement child in InternalChildren)
         {
@@ -71,20 +58,17 @@ public sealed class AdaptiveCardPanel : Panel
                 child,
                 columnWidth,
                 item?.IsImage == true);
-            var column = FindShortestColumn(columnHeights);
-            var top = columnHeights[column];
-            var left = column * (columnWidth + Gap);
 
             _placements.Add(new CardPlacement(
                 child,
-                left,
+                0,
                 top,
                 columnWidth,
                 cardHeight));
-            columnHeights[column] = top + cardHeight + Gap;
+            top += cardHeight + Gap;
         }
 
-        var height = Math.Max(0, columnHeights.Max() - Gap);
+        var height = Math.Max(0, top - Gap);
         return new Size(width, height);
     }
 
@@ -119,20 +103,6 @@ public sealed class AdaptiveCardPanel : Panel
         }
 
         return finalSize;
-    }
-
-    private static int FindShortestColumn(double[] columnHeights)
-    {
-        var shortest = 0;
-        for (var index = 1; index < columnHeights.Length; index++)
-        {
-            if (columnHeights[index] < columnHeights[shortest])
-            {
-                shortest = index;
-            }
-        }
-
-        return shortest;
     }
 
     private void Element_DataContextChanged(

@@ -8,65 +8,29 @@ namespace ClipNest.Tests;
 
 public sealed class AdaptiveCardPanelTests
 {
-    [Theory]
-    [InlineData(280, 1)]
-    [InlineData(450, 1)]
-    [InlineData(519, 1)]
-    [InlineData(520, 2)]
-    [InlineData(779, 2)]
-    [InlineData(780, 3)]
-    [InlineData(900, 3)]
-    public void ColumnCount_AdaptsToAvailableWidth(int width, int expected)
-    {
-        Assert.Equal(expected, AdaptiveCardPanel.GetColumnCount(width));
-    }
-
     [Fact]
-    public void SingleColumn_AllCardsUseTheFullWidth()
+    public void WideLayout_StillUsesOneFullWidthColumn()
     {
         RunOnSta(() =>
         {
             var panel = new AdaptiveCardPanel();
-            var first = CreateCard(ClipItem.Create(ClipContent.FromText("first")), 40);
+            var first = CreateCard(ClipItem.Create(ClipContent.FromText("first")), 100);
             var second = CreateCard(ClipItem.Create(ClipContent.FromText("second")), 40);
-            panel.Children.Add(first);
-            panel.Children.Add(second);
-
-            Arrange(panel, 450);
-
-            Assert.Equal(450, first.ActualWidth);
-            Assert.Equal(450, second.ActualWidth);
-            Assert.Equal(0, first.TranslatePoint(new Point(0, 0), panel).X);
-            Assert.Equal(0, second.TranslatePoint(new Point(0, 0), panel).X);
-            Assert.Equal(47, second.TranslatePoint(new Point(0, 0), panel).Y);
-        });
-    }
-
-    [Fact]
-    public void TwoColumns_UseEqualWidthsAndNeverCreateSpanRows()
-    {
-        RunOnSta(() =>
-        {
-            var panel = new AdaptiveCardPanel();
-            var longText = ClipItem.Create(ClipContent.FromText(new string('字', 120)));
-            var shortText = ClipItem.Create(ClipContent.FromText("short"));
-            var thirdText = ClipItem.Create(ClipContent.FromText("third"));
-            var first = CreateCard(longText, 100);
-            var second = CreateCard(shortText, 40);
-            var third = CreateCard(thirdText, 40);
+            var third = CreateCard(ClipItem.Create(ClipContent.FromText("third")), 40);
             panel.Children.Add(first);
             panel.Children.Add(second);
             panel.Children.Add(third);
 
             Arrange(panel, 600);
 
-            Assert.Equal(296.5, first.ActualWidth, precision: 3);
-            Assert.Equal(296.5, second.ActualWidth, precision: 3);
-            Assert.Equal(296.5, third.ActualWidth, precision: 3);
+            Assert.Equal(600, first.ActualWidth);
+            Assert.Equal(600, second.ActualWidth);
+            Assert.Equal(600, third.ActualWidth);
             Assert.Equal(0, first.TranslatePoint(new Point(0, 0), panel).X);
-            Assert.Equal(303.5, second.TranslatePoint(new Point(0, 0), panel).X, precision: 3);
-            Assert.Equal(303.5, third.TranslatePoint(new Point(0, 0), panel).X, precision: 3);
-            Assert.Equal(47, third.TranslatePoint(new Point(0, 0), panel).Y);
+            Assert.Equal(0, second.TranslatePoint(new Point(0, 0), panel).X);
+            Assert.Equal(0, third.TranslatePoint(new Point(0, 0), panel).X);
+            Assert.Equal(107, second.TranslatePoint(new Point(0, 0), panel).Y);
+            Assert.Equal(154, third.TranslatePoint(new Point(0, 0), panel).Y);
         });
     }
 

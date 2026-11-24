@@ -20,6 +20,7 @@ internal static class Program
         var searchMode = args.Contains("--search", StringComparer.OrdinalIgnoreCase);
         var confirmMode = args.Contains("--confirm", StringComparer.OrdinalIgnoreCase);
         var settingsMode = args.Contains("--settings", StringComparer.OrdinalIgnoreCase);
+        var wideMode = args.Contains("--wide", StringComparer.OrdinalIgnoreCase);
         var outputArgument = args.FirstOrDefault(argument => !argument.StartsWith("--", StringComparison.Ordinal));
         var outputPath = outputArgument is not null
             ? Path.GetFullPath(outputArgument)
@@ -113,12 +114,13 @@ internal static class Program
             viewModel.SearchText = "ClipNest";
         }
 
-        window.Width = 450;
+        var previewWidth = wideMode ? 600 : 450;
+        window.Width = previewWidth;
         window.Height = 300;
 
         var content = (FrameworkElement)window.Content;
-        content.Measure(new Size(450, 300));
-        content.Arrange(new Rect(0, 0, 450, 300));
+        content.Measure(new Size(previewWidth, 300));
+        content.Arrange(new Rect(0, 0, previewWidth, 300));
         content.UpdateLayout();
 
         var previewFrame = new DispatcherFrame();
@@ -132,7 +134,14 @@ internal static class Program
         previewTimer.Stop();
         content.UpdateLayout();
 
-        var renderedWindow = new RenderTargetBitmap(900, 600, 192, 192, PixelFormats.Pbgra32);
+        var pixelWidth = previewWidth * 2;
+        const int pixelHeight = 600;
+        var renderedWindow = new RenderTargetBitmap(
+            pixelWidth,
+            pixelHeight,
+            192,
+            192,
+            PixelFormats.Pbgra32);
         renderedWindow.Render(content);
 
         var composition = new DrawingVisual();
@@ -141,11 +150,18 @@ internal static class Program
             context.DrawRectangle(
                 new SolidColorBrush(Color.FromRgb(222, 233, 228)),
                 null,
-                new Rect(0, 0, 900, 600));
-            context.DrawImage(renderedWindow, new Rect(0, 0, 900, 600));
+                new Rect(0, 0, pixelWidth, pixelHeight));
+            context.DrawImage(
+                renderedWindow,
+                new Rect(0, 0, pixelWidth, pixelHeight));
         }
 
-        var final = new RenderTargetBitmap(900, 600, 96, 96, PixelFormats.Pbgra32);
+        var final = new RenderTargetBitmap(
+            pixelWidth,
+            pixelHeight,
+            96,
+            96,
+            PixelFormats.Pbgra32);
         final.Render(composition);
 
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
