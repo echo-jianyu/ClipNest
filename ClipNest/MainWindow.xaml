@@ -272,11 +272,12 @@
                                                 x:Name="TextLayout"
                                                 Margin="13,9,10,9">
                                                 <TextBlock
-                                                    MaxHeight="114"
+                                                    MaxHeight="{Binding DisplayMaxHeight}"
                                                     VerticalAlignment="Center"
                                                     FontSize="{Binding DisplayFontSize}"
                                                     Foreground="{StaticResource InkBrush}"
                                                     LineHeight="{Binding DisplayLineHeight}"
+                                                    LineStackingStrategy="BlockLineHeight"
                                                     Text="{Binding DisplayText}"
                                                     TextTrimming="CharacterEllipsis"
                                                     TextWrapping="Wrap"

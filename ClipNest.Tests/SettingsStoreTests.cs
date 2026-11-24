@@ -36,7 +36,6 @@ public sealed class SettingsStoreTests
             Assert.Equal(HotKeyDefinition.Default.Modifiers, settings.HotKeyModifiers);
             Assert.Equal(HotKeyDefinition.Default.VirtualKey, settings.HotKeyKey);
             Assert.False(settings.HideAfterCopy);
-            Assert.Equal(40, settings.CardTextLimit);
             Assert.Equal(13.5, settings.CardFontSize);
             Assert.False(settings.AutoStartOnLogin);
         }
@@ -64,7 +63,6 @@ public sealed class SettingsStoreTests
                 HotKeyModifiers = HotKeyDefinition.ControlModifier,
                 HotKeyKey = 0x56,
                 HideAfterCopy = true,
-                CardTextLimit = 72,
                 CardFontSize = 15,
                 AutoStartOnLogin = false
             });
@@ -78,7 +76,6 @@ public sealed class SettingsStoreTests
             Assert.Equal(HotKeyDefinition.ControlModifier, settings.HotKeyModifiers);
             Assert.Equal(0x56u, settings.HotKeyKey);
             Assert.True(settings.HideAfterCopy);
-            Assert.Equal(72, settings.CardTextLimit);
             Assert.Equal(15, settings.CardFontSize);
             Assert.False(settings.AutoStartOnLogin);
         }

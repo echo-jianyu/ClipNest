@@ -13,8 +13,6 @@ public sealed class AppSettings
     public const double MinimumHeight = 240;
     public const double MaximumWidth = 900;
     public const double MaximumHeight = 900;
-    public const int MinimumCardTextLimit = 20;
-    public const int MaximumCardTextLimit = 200;
     public const double MinimumCardFontSize = 11;
     public const double MaximumCardFontSize = 20;
 
@@ -41,9 +39,6 @@ public sealed class AppSettings
 
     [DataMember(Name = "hideAfterCopy", Order = 6)]
     public bool HideAfterCopy { get; set; }
-
-    [DataMember(Name = "cardTextLimit", Order = 7)]
-    public int CardTextLimit { get; set; } = 40;
 
     [DataMember(Name = "cardFontSize", Order = 8)]
     public double CardFontSize { get; set; } = 13.5;
@@ -99,11 +94,6 @@ public sealed class AppSettings
             HotKeyKey = HotKeyDefinition.Default.VirtualKey;
         }
 
-        CardTextLimit = CardTextLimit <= 0
-            ? 40
-            : Math.Min(
-                Math.Max(CardTextLimit, MinimumCardTextLimit),
-                MaximumCardTextLimit);
         CardFontSize = !IsFinite(CardFontSize) || CardFontSize <= 0
             ? 13.5
             : Math.Min(

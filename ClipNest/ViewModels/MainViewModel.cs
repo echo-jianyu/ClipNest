@@ -39,7 +39,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private bool _isSearchOpen;
     private string _searchText = string.Empty;
     private ClipHistoryFilter _activeFilter = ClipHistoryFilter.All;
-    private int _cardTextLimit = ClipItem.DefaultDisplayTextLimit;
     private double _cardFontSize = ClipItem.DefaultDisplayFontSize;
     private bool _disposed;
 
@@ -245,13 +244,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public event Action<string, bool>? NotificationRequested;
 
-    public void ApplyDisplaySettings(int textLimit, double fontSize)
+    public void ApplyDisplaySettings(double fontSize)
     {
-        _cardTextLimit = Math.Max(1, textLimit);
         _cardFontSize = Math.Max(1, fontSize);
         foreach (var item in _items)
         {
-            item.ApplyDisplaySettings(_cardTextLimit, _cardFontSize);
+            item.ApplyDisplaySettings(_cardFontSize);
         }
     }
 
@@ -290,7 +288,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         else
         {
             var newItem = ClipItem.Create(content);
-            newItem.ApplyDisplaySettings(_cardTextLimit, _cardFontSize);
+            newItem.ApplyDisplaySettings(_cardFontSize);
             _items.Insert(0, newItem);
             TrimToLimit(newItem);
         }

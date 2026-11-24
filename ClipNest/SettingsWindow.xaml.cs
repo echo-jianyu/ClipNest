@@ -16,14 +16,12 @@ public partial class SettingsWindow : Window
     private bool _isCapturingHotKey;
 
     public SettingsWindow(
-        int cardTextLimit,
         double cardFontSize,
         HotKeyDefinition hotKey,
         bool hideAfterCopy,
         bool autoStartOnLogin)
     {
         InitializeComponent();
-        TextLimitTextBox.Text = cardTextLimit.ToString(CultureInfo.CurrentCulture);
         FontSizeTextBox.Text = cardFontSize.ToString("0.#", CultureInfo.CurrentCulture);
         _hotKey = hotKey ?? throw new ArgumentNullException(nameof(hotKey));
         HideAfterCopyCheckBox.IsChecked = hideAfterCopy;
@@ -31,9 +29,6 @@ public partial class SettingsWindow : Window
         VersionTextBlock.Text = $"版本 {AppVersion.Display}";
         UpdateHotKeyButton();
     }
-
-    public int CardTextLimit { get; private set; } =
-        ClipItem.DefaultDisplayTextLimit;
 
     public double CardFontSize { get; private set; } =
         ClipItem.DefaultDisplayFontSize;
@@ -46,17 +41,6 @@ public partial class SettingsWindow : Window
 
     private void SaveButton_Click(object sender, RoutedEventArgs eventArgs)
     {
-        if (!int.TryParse(
-                TextLimitTextBox.Text,
-                NumberStyles.Integer,
-                CultureInfo.CurrentCulture,
-                out var textLimit))
-        {
-            ShowValidationError("卡片字符数必须是整数。");
-            TextLimitTextBox.Focus();
-            return;
-        }
-
         if (!double.TryParse(
                 FontSizeTextBox.Text,
                 NumberStyles.Float,
@@ -65,16 +49,6 @@ public partial class SettingsWindow : Window
         {
             ShowValidationError("卡片字号必须是数字。");
             FontSizeTextBox.Focus();
-            return;
-        }
-
-        if (textLimit < AppSettings.MinimumCardTextLimit
-            || textLimit > AppSettings.MaximumCardTextLimit)
-        {
-            ShowValidationError(
-                $"卡片字符数需在 {AppSettings.MinimumCardTextLimit}–" +
-                $"{AppSettings.MaximumCardTextLimit} 之间。");
-            TextLimitTextBox.Focus();
             return;
         }
 
@@ -89,7 +63,6 @@ public partial class SettingsWindow : Window
         }
 
         HideValidationError();
-        CardTextLimit = textLimit;
         CardFontSize = fontSize;
         HideAfterCopy = HideAfterCopyCheckBox.IsChecked == true;
         AutoStartOnLogin = AutoStartCheckBox.IsChecked == true;
@@ -157,23 +130,6 @@ public partial class SettingsWindow : Window
         }
     }
 
-    private void IntegerTextBox_PreviewTextInput(
-        object sender,
-        TextCompositionEventArgs eventArgs)
-    {
-        if (sender is not TextBox textBox)
-        {
-            return;
-        }
-
-        var candidate = BuildCandidateText(textBox, eventArgs.Text);
-        eventArgs.Handled = !IsValidNumericText(candidate, allowDecimal: false);
-        if (!eventArgs.Handled)
-        {
-            HideValidationError();
-        }
-    }
-
     private void FloatTextBox_PreviewTextInput(
         object sender,
         TextCompositionEventArgs eventArgs)
@@ -184,24 +140,10 @@ public partial class SettingsWindow : Window
         }
 
         var candidate = BuildCandidateText(textBox, eventArgs.Text);
-        eventArgs.Handled = !IsValidNumericText(candidate, allowDecimal: true);
+        eventArgs.Handled = !IsValidNumericText(candidate);
         if (!eventArgs.Handled)
         {
             HideValidationError();
-        }
-    }
-
-    private void IntegerTextBox_Pasting(
-        object sender,
-        DataObjectPastingEventArgs eventArgs)
-    {
-        if (sender is not TextBox textBox
-            || !TryGetPastedText(eventArgs, out var pastedText)
-            || !IsValidNumericText(
-                BuildCandidateText(textBox, pastedText),
-                allowDecimal: false))
-        {
-            eventArgs.CancelCommand();
         }
     }
 
@@ -211,9 +153,7 @@ public partial class SettingsWindow : Window
     {
         if (sender is not TextBox textBox
             || !TryGetPastedText(eventArgs, out var pastedText)
-            || !IsValidNumericText(
-                BuildCandidateText(textBox, pastedText),
-                allowDecimal: true))
+            || !IsValidNumericText(BuildCandidateText(textBox, pastedText)))
         {
             eventArgs.CancelCommand();
         }
@@ -237,7 +177,7 @@ public partial class SettingsWindow : Window
         return true;
     }
 
-    private static bool IsValidNumericText(string text, bool allowDecimal)
+    private static bool IsValidNumericText(string text)
     {
         if (text.Length == 0)
         {
@@ -255,8 +195,7 @@ public partial class SettingsWindow : Window
                 continue;
             }
 
-            if (allowDecimal
-                && decimalSeparator.Length > 0
+            if (decimalSeparator.Length > 0
                 && string.CompareOrdinal(
                     text,
                     index,

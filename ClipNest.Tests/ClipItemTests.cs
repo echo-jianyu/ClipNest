@@ -8,33 +8,26 @@ namespace ClipNest.Tests;
 public sealed class ClipItemTests
 {
     [Fact]
-    public void DefaultDisplayTextLimit_IsFortyCharacters()
+    public void DisplayText_KeepsFullNormalizedTextForTwoLineTrimming()
     {
-        Assert.Equal(40, ClipItem.DefaultDisplayTextLimit);
-    }
+        var text = $"  {new string('字', 120)}\r\nsecond line  ";
+        var item = ClipItem.Create(ClipContent.FromText(text));
 
-    [Fact]
-    public void DisplayText_TruncatesAfterDisplayLimit()
-    {
-        var item = ClipItem.Create(ClipContent.FromText(
-            new string('字', ClipItem.DefaultDisplayTextLimit + 20)));
-
-        Assert.Equal(ClipItem.DefaultDisplayTextLimit + 1, item.DisplayText.Length);
         Assert.Equal(
-            new string('字', ClipItem.DefaultDisplayTextLimit) + "…",
+            $"{new string('字', 120)} second line",
             item.DisplayText);
     }
 
     [Fact]
-    public void ApplyDisplaySettings_UpdatesPreviewAndTypography()
+    public void ApplyDisplaySettings_UpdatesTypographyAndTwoLineHeight()
     {
         var item = ClipItem.Create(ClipContent.FromText(new string('字', 80)));
 
-        item.ApplyDisplaySettings(textLimit: 24, fontSize: 16);
+        item.ApplyDisplaySettings(fontSize: 16);
 
-        Assert.Equal(25, item.DisplayText.Length);
         Assert.Equal(16, item.DisplayFontSize);
         Assert.Equal(22.4, item.DisplayLineHeight);
+        Assert.Equal(44.8, item.DisplayMaxHeight);
     }
 
     [Fact]

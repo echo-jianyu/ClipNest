@@ -401,12 +401,10 @@ public sealed class MainViewModelTests
         clipboard.Emit(ClipContent.FromText("existing"));
         var existing = viewModel.Items[0];
 
-        viewModel.ApplyDisplaySettings(textLimit: 64, fontSize: 16);
+        viewModel.ApplyDisplaySettings(fontSize: 16);
         clipboard.Emit(ClipContent.FromText("new item"));
 
-        Assert.Equal(64, existing.DisplayTextLimit);
         Assert.Equal(16, existing.DisplayFontSize);
-        Assert.Equal(64, viewModel.Items[0].DisplayTextLimit);
         Assert.Equal(16, viewModel.Items[0].DisplayFontSize);
     }
 

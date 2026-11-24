@@ -75,17 +75,15 @@ public sealed class AppSettingsTests
     }
 
     [Fact]
-    public void Normalize_ClampsCardDisplaySettings()
+    public void Normalize_ClampsCardFontSize()
     {
         var settings = new AppSettings
         {
-            CardTextLimit = 500,
             CardFontSize = 4
         };
 
         settings.Normalize();
 
-        Assert.Equal(AppSettings.MaximumCardTextLimit, settings.CardTextLimit);
         Assert.Equal(AppSettings.MinimumCardFontSize, settings.CardFontSize);
     }
 

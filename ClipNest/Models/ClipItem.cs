@@ -8,7 +8,6 @@ namespace ClipNest.Models;
 
 public sealed class ClipItem : ObservableObject
 {
-    public const int DefaultDisplayTextLimit = 40;
     public const double DefaultDisplayFontSize = 13.5;
 
     private static readonly Regex WhitespaceRegex = new(@"\s+", RegexOptions.Compiled);
@@ -17,7 +16,6 @@ public sealed class ClipItem : ObservableObject
 
     private bool _pinned;
     private bool _isKeyboardSelected;
-    private int _displayTextLimit = DefaultDisplayTextLimit;
     private double _displayFontSize = DefaultDisplayFontSize;
     private string _plainText = string.Empty;
     private string _displayText = string.Empty;
@@ -117,19 +115,6 @@ public sealed class ClipItem : ObservableObject
         get => _displayText;
     }
 
-    public int DisplayTextLimit
-    {
-        get => _displayTextLimit;
-        private set
-        {
-            if (SetProperty(ref _displayTextLimit, value))
-            {
-                RefreshPreviewText();
-                OnPropertyChanged(nameof(DisplayText));
-            }
-        }
-    }
-
     public double DisplayFontSize
     {
         get => _displayFontSize;
@@ -138,11 +123,14 @@ public sealed class ClipItem : ObservableObject
             if (SetProperty(ref _displayFontSize, value))
             {
                 OnPropertyChanged(nameof(DisplayLineHeight));
+                OnPropertyChanged(nameof(DisplayMaxHeight));
             }
         }
     }
 
     public double DisplayLineHeight => Math.Round(DisplayFontSize * 1.4, 1);
+
+    public double DisplayMaxHeight => Math.Round(DisplayLineHeight * 2, 1);
 
     public string TooltipText
     {
@@ -218,9 +206,8 @@ public sealed class ClipItem : ObservableObject
         return true;
     }
 
-    internal void ApplyDisplaySettings(int textLimit, double fontSize)
+    internal void ApplyDisplaySettings(double fontSize)
     {
-        DisplayTextLimit = Math.Max(1, textLimit);
         DisplayFontSize = Math.Max(1, fontSize);
     }
 
@@ -391,9 +378,7 @@ public sealed class ClipItem : ObservableObject
         }
 
         var normalized = WhitespaceRegex.Replace(PlainText, " ").Trim();
-        _displayText = normalized.Length <= DisplayTextLimit
-            ? normalized
-            : $"{normalized.Substring(0, DisplayTextLimit)}…";
+        _displayText = normalized;
         _tooltipText = PlainText.Length <= 2000
             ? PlainText
             : $"{PlainText.Substring(0, 2000)}…";

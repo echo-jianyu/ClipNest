@@ -70,9 +70,7 @@ public partial class MainWindow : Window, IDisposable
 
         InitializeComponent();
         DataContext = _viewModel;
-        _viewModel.ApplyDisplaySettings(
-            _settings.CardTextLimit,
-            _settings.CardFontSize);
+        _viewModel.ApplyDisplaySettings(_settings.CardFontSize);
         ApplySettings();
 
         _viewModel.HistoryChanged += ViewModel_HistoryChanged;
@@ -958,7 +956,6 @@ public partial class MainWindow : Window, IDisposable
     public void ShowSettings()
     {
         var dialog = new SettingsWindow(
-            _settings.CardTextLimit,
             _settings.CardFontSize,
             _hotKeyService.CurrentHotKey,
             _settings.HideAfterCopy,
@@ -1009,12 +1006,9 @@ public partial class MainWindow : Window, IDisposable
             _settings.AutoStartOnLogin = dialog.AutoStartOnLogin;
         }
 
-        _settings.CardTextLimit = dialog.CardTextLimit;
         _settings.CardFontSize = dialog.CardFontSize;
         _settings.HideAfterCopy = dialog.HideAfterCopy;
-        _viewModel.ApplyDisplaySettings(
-            _settings.CardTextLimit,
-            _settings.CardFontSize);
+        _viewModel.ApplyDisplaySettings(_settings.CardFontSize);
         _ = SaveSettingsAsync();
         UpdateHotKeyUi();
         var notices = new List<string>();

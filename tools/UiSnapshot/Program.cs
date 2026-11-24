@@ -59,7 +59,6 @@ internal static class Program
         if (settingsMode)
         {
             var settingsWindow = new SettingsWindow(
-                40,
                 13.5,
                 HotKeyDefinition.Default,
                 hideAfterCopy: true,
