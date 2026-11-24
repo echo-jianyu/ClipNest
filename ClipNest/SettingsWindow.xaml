@@ -237,6 +237,7 @@
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
                         <TextBlock
                             FontSize="10.5"
@@ -273,6 +274,32 @@
                             FontSize="10.5"
                             Foreground="{StaticResource InkBrush}"
                             Text="%LOCALAPPDATA%\ClipNest" />
+                        <TextBlock
+                            Grid.Row="3"
+                            Margin="0,6,0,0"
+                            FontSize="10.5"
+                            Foreground="{StaticResource MutedBrush}"
+                            Text="项目链接" />
+                        <TextBlock
+                            Grid.Row="3"
+                            Grid.Column="1"
+                            Margin="0,6,0,0"
+                            FontSize="10.5"
+                            Foreground="{StaticResource InkBrush}">
+                            <Hyperlink
+                                AutomationProperties.Name="打开 GitHub 项目主页"
+                                Foreground="{StaticResource SeaBrush}"
+                                NavigateUri="https://github.com/echo-jianyu/ClipNest"
+                                RequestNavigate="ProjectLink_RequestNavigate"
+                                TextDecorations="Underline">GitHub</Hyperlink>
+                            <Run Text="  ·  " />
+                            <Hyperlink
+                                AutomationProperties.Name="打开 Gitee 项目主页"
+                                Foreground="{StaticResource SeaBrush}"
+                                NavigateUri="https://gitee.com/echo-jian/clipnest"
+                                RequestNavigate="ProjectLink_RequestNavigate"
+                                TextDecorations="Underline">Gitee</Hyperlink>
+                        </TextBlock>
                     </Grid>
                 </StackPanel>
             </Border>

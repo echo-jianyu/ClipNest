@@ -1,3 +1,6 @@
+using System.Windows;
+using System.Windows.Controls;
+using System.Runtime.ExceptionServices;
 using ClipNest.Controls;
 using ClipNest.Models;
 
@@ -50,6 +53,50 @@ public sealed class AdaptiveCardPanelTests
     }
 
     [Fact]
+    public void SmallLandscapeImage_DoesNotGrowBeyondNaturalDimensions()
+    {
+        var item = ClipItem.Create(ClipContent.FromImage([1], 266, 125));
+
+        Assert.True(AdaptiveCardPanel.ShouldSpanColumns(item, 210, 2));
+        var width = AdaptiveCardPanel.CalculateCardWidth(item, 436);
+        var height = AdaptiveCardPanel.CalculateCardHeight(item, width);
+
+        Assert.Equal(278, width);
+        Assert.Equal(137, height);
+        Assert.Equal(item.PixelWidth, width - 12);
+        Assert.Equal(item.PixelHeight, height - 12);
+    }
+
+    [Fact]
+    public void ImageThatFitsOneColumn_DoesNotSpanOrStretchToColumnWidth()
+    {
+        var item = ClipItem.Create(ClipContent.FromImage([1], 180, 72));
+
+        Assert.False(AdaptiveCardPanel.ShouldSpanColumns(item, 210, 2));
+        Assert.Equal(192, AdaptiveCardPanel.CalculateCardWidth(item, 210));
+    }
+
+    [Fact]
+    public void WideImageCard_SpansFromTheLeftEdge()
+    {
+        RunOnSta(() =>
+        {
+            var panel = new AdaptiveCardPanel();
+            var card = new Border
+            {
+                DataContext = ClipItem.Create(ClipContent.FromImage([1], 266, 125))
+            };
+            panel.Children.Add(card);
+
+            panel.Measure(new Size(450, 300));
+            panel.Arrange(new Rect(0, 0, 450, 300));
+
+            Assert.Equal(0, card.TranslatePoint(new Point(0, 0), panel).X);
+            Assert.Equal(278, card.ActualWidth);
+        });
+    }
+
+    [Fact]
     public void TextHeight_GrowsWithPreviewLength()
     {
         var shortText = ClipItem.Create(ClipContent.FromText("short"));
@@ -73,5 +120,29 @@ public sealed class AdaptiveCardPanelTests
         Assert.True(
             AdaptiveCardPanel.CalculateCardHeight(large, 210)
             > AdaptiveCardPanel.CalculateCardHeight(small, 210));
+    }
+
+    private static void RunOnSta(Action action)
+    {
+        Exception? failure = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                action();
+            }
+            catch (Exception exception)
+            {
+                failure = exception;
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+
+        if (failure is not null)
+        {
+            ExceptionDispatchInfo.Capture(failure).Throw();
+        }
     }
 }

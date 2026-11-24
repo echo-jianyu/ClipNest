@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media.Imaging;
@@ -297,8 +298,35 @@ public sealed class ClipboardService : IClipboardService
         ClipItem item,
         bool includeFormatting)
     {
-        var dataObject = new WpfDataObject();
+        var dataObject = BuildContentDataObject(item, includeFormatting);
         dataObject.SetData(InternalCopyFormat, "ClipNest");
+        return dataObject;
+    }
+
+    internal static WpfDataObject BuildDragDataObject(ClipItem item)
+    {
+        var dataObject = BuildContentDataObject(item, includeFormatting: true);
+        if (item.Kind == ClipContentKind.Image)
+        {
+            var bytes = item.GetImageBytes()
+                ?? throw new InvalidOperationException("Image data is missing.");
+            var imagePath = item.ImageFilePath;
+            if (string.IsNullOrWhiteSpace(imagePath) || !File.Exists(imagePath))
+            {
+                imagePath = EnsureDragImageFile(bytes, item.Signature);
+            }
+
+            dataObject.SetData(WpfDataFormats.FileDrop, new[] { imagePath });
+        }
+
+        return dataObject;
+    }
+
+    private static WpfDataObject BuildContentDataObject(
+        ClipItem item,
+        bool includeFormatting)
+    {
+        var dataObject = new WpfDataObject();
 
         if (item.Kind == ClipContentKind.Image)
         {
@@ -333,6 +361,65 @@ public sealed class ClipboardService : IClipboardService
         }
 
         return dataObject;
+    }
+
+    private static string EnsureDragImageFile(byte[] bytes, string signature)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "ClipNest", "drag");
+        Directory.CreateDirectory(directory);
+
+        var fileName = GetImageHash(signature, bytes);
+        var path = Path.Combine(directory, $"{fileName}.png");
+        if (File.Exists(path))
+        {
+            return path;
+        }
+
+        var temporaryPath = $"{path}.{Guid.NewGuid():N}.tmp";
+        try
+        {
+            File.WriteAllBytes(temporaryPath, bytes);
+            try
+            {
+                File.Move(temporaryPath, path);
+                return path;
+            }
+            catch (IOException) when (File.Exists(path))
+            {
+                return path;
+            }
+        }
+        finally
+        {
+            try
+            {
+                if (File.Exists(temporaryPath))
+                {
+                    File.Delete(temporaryPath);
+                }
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+        }
+    }
+
+    private static string GetImageHash(string signature, byte[] bytes)
+    {
+        const string imagePrefix = "Image:";
+        if (signature.StartsWith(imagePrefix, StringComparison.Ordinal)
+            && signature.Length == imagePrefix.Length + 64
+            && signature.Skip(imagePrefix.Length).All(Uri.IsHexDigit))
+        {
+            return signature.Substring(imagePrefix.Length).ToLowerInvariant();
+        }
+
+        using var sha256 = SHA256.Create();
+        var hash = sha256.ComputeHash(bytes);
+        return BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant();
     }
 
     private static BitmapImage DecodeImage(byte[] bytes)

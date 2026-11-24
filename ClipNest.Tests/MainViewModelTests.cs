@@ -155,9 +155,9 @@ public sealed class MainViewModelTests
         using var clipboard = new FakeClipboardService();
         using var viewModel = new MainViewModel(clipboard, []);
         clipboard.Emit(ClipContent.FromImage(
-            EncodePng(4, 2),
-            4,
-            2));
+            EncodePng(400, 200),
+            400,
+            200));
         var image = viewModel.Items[0];
 
         Assert.True(AdaptiveCardPanel.ShouldSpanColumns(image, 210, 2));
@@ -171,8 +171,8 @@ public sealed class MainViewModelTests
 
         Assert.False(viewModel.IsEditingImage);
         Assert.NotNull(image.ImagePngBase64);
-        Assert.Equal(2, image.PixelWidth);
-        Assert.Equal(4, image.PixelHeight);
+        Assert.Equal(200, image.PixelWidth);
+        Assert.Equal(400, image.PixelHeight);
         Assert.False(AdaptiveCardPanel.ShouldSpanColumns(image, 210, 2));
     }
 

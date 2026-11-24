@@ -8,6 +8,8 @@ namespace ClipNest.Controls;
 public sealed class AdaptiveCardPanel : Panel
 {
     private const double Gap = 7;
+    private const double ImageCardInset = 12;
+    private const double MinimumImageCardWidth = 64;
     private readonly List<CardPlacement> _placements = [];
     private readonly Dictionary<UIElement, ClipItem> _observedItems = [];
 
@@ -34,12 +36,25 @@ public sealed class AdaptiveCardPanel : Panel
         if (item.IsImage)
         {
             return item.PixelHeight > 0
-                && (double)item.PixelWidth / item.PixelHeight >= 1.6;
+                && (double)item.PixelWidth / item.PixelHeight >= 1.6
+                && item.PixelWidth + ImageCardInset > columnWidth;
         }
 
         var textLength = NormalizeText(item.PlainText).Length;
         var threshold = columnWidth >= 260 ? 90 : 58;
         return textLength > threshold;
+    }
+
+    internal static double CalculateCardWidth(ClipItem item, double availableWidth)
+    {
+        if (!item.IsImage || item.PixelWidth <= 0)
+        {
+            return availableWidth;
+        }
+
+        return Math.Min(
+            availableWidth,
+            Math.Max(MinimumImageCardWidth, item.PixelWidth + ImageCardInset));
     }
 
     internal static double CalculateCardHeight(ClipItem item, double cardWidth)
@@ -49,7 +64,13 @@ public sealed class AdaptiveCardPanel : Panel
             var aspect = item.PixelWidth > 0 && item.PixelHeight > 0
                 ? (double)item.PixelWidth / item.PixelHeight
                 : 1.5;
-            return Math.Min(250, Math.Max(96, (cardWidth / aspect) + 12));
+            var displayWidth = Math.Max(
+                1,
+                Math.Min(item.PixelWidth, cardWidth - ImageCardInset));
+            var displayHeight = displayWidth / aspect;
+            return Math.Min(
+                250,
+                Math.Max(48, displayHeight + ImageCardInset));
         }
 
         var charactersPerLine = Math.Max(
@@ -90,25 +111,30 @@ public sealed class AdaptiveCardPanel : Panel
             var item = (child as FrameworkElement)?.DataContext as ClipItem;
             var spansColumns = item is not null
                 && ShouldSpanColumns(item, columnWidth, columnCount);
-            var cardWidth = spansColumns ? width : columnWidth;
+            var availableCardWidth = spansColumns ? width : columnWidth;
+            var cardWidth = item is not null
+                ? CalculateCardWidth(item, availableCardWidth)
+                : availableCardWidth;
             var cardHeight = item is not null
                 ? CalculateCardHeight(item, cardWidth)
                 : 48;
 
             int column;
             double top;
+            double left;
             if (spansColumns)
             {
                 column = 0;
                 top = columnHeights.Max();
+                left = 0;
             }
             else
             {
                 column = FindShortestColumn(columnHeights);
                 top = columnHeights[column];
+                left = column * (columnWidth + Gap);
             }
 
-            var left = column * (columnWidth + Gap);
             child.Measure(new Size(cardWidth, cardHeight));
             _placements.Add(new CardPlacement(child, left, top, cardWidth, cardHeight));
 

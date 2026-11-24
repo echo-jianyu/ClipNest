@@ -208,7 +208,7 @@
 
     <Style x:Key="ToastActionButtonStyle" TargetType="{x:Type Button}">
         <Setter Property="Background" Value="Transparent" />
-        <Setter Property="Foreground" Value="#FFFFB7A6" />
+        <Setter Property="Foreground" Value="#FFFFFFFF" />
         <Setter Property="Padding" Value="8,3" />
         <Setter Property="Margin" Value="8,0,0,0" />
         <Setter Property="Cursor" Value="Hand" />
@@ -488,7 +488,8 @@
         <Setter Property="BorderBrush" Value="{StaticResource LineBrush}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Padding" Value="10,8" />
-        <Setter Property="SelectionBrush" Value="{StaticResource AccentSoftBrush}" />
+        <Setter Property="SelectionBrush" Value="{StaticResource SeaBrush}" />
+        <Setter Property="SelectionOpacity" Value="0.32" />
         <Setter Property="CaretBrush" Value="{StaticResource InkBrush}" />
         <Setter Property="VerticalScrollBarVisibility" Value="Auto" />
         <Setter Property="TextWrapping" Value="Wrap" />

@@ -1,7 +1,10 @@
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Navigation;
 using ClipNest.Infrastructure;
 using ClipNest.Models;
 
@@ -122,6 +125,37 @@ public partial class SettingsWindow : Window
     {
         eventArgs.Handled = eventArgs.Text.Any(
             character => !char.IsDigit(character) && character != '.');
+    }
+
+    private void ProjectLink_RequestNavigate(
+        object sender,
+        RequestNavigateEventArgs eventArgs)
+    {
+        eventArgs.Handled = true;
+        if (eventArgs.Uri is not { IsAbsoluteUri: true } uri
+            || !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo(uri.AbsoluteUri)
+            {
+                UseShellExecute = true
+            });
+        }
+        catch (Exception exception) when (
+            exception is InvalidOperationException
+            or Win32Exception)
+        {
+            MessageBox.Show(
+                this,
+                $"无法打开项目链接。\n\n{exception.Message}",
+                "ClipNest",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
     }
 
     private void UpdateHotKeyButton()

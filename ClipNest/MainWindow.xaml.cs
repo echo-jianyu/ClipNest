@@ -35,9 +35,14 @@ public partial class MainWindow : Window, IDisposable
 
     private bool _disposed;
     private bool _isResizing;
+    private Point _resizeStartCursor;
+    private double _resizeStartWidth;
     private bool _historySaveWarningShown;
     private bool _hotKeyAvailable = true;
     private ClipItem? _pressedClipItem;
+    private Point _cardDragStartPoint;
+    private bool _cardDragStartPointValid;
+    private bool _isCardDragging;
     private ClipItem? _pendingCardCopyItem;
     private bool _copyDispatchQueued;
     private ClipItem? _selectedItem;
@@ -421,7 +426,12 @@ public partial class MainWindow : Window, IDisposable
 
     private void MainWindow_SizeChanged(object sender, SizeChangedEventArgs eventArgs)
     {
-        if (!_isResizing && Math.Abs(Width / Height - AppSettings.AspectRatio) > 0.01)
+        if (_isResizing)
+        {
+            return;
+        }
+
+        if (Math.Abs(Width / Height - AppSettings.AspectRatio) > 0.01)
         {
             _isResizing = true;
             Height = Width / AppSettings.AspectRatio;
@@ -510,16 +520,21 @@ public partial class MainWindow : Window, IDisposable
         eventArgs.Handled = true;
     }
 
+    private void ResizeGrip_DragStarted(object sender, DragStartedEventArgs eventArgs)
+    {
+        _resizeStartWidth = Width;
+        _resizeStartCursor = GetCursorScreenPositionInDips();
+        _isResizing = true;
+        _placementSaveTimer.Stop();
+    }
+
     private void ResizeGrip_DragDelta(object sender, DragDeltaEventArgs eventArgs)
     {
-        var horizontal = eventArgs.HorizontalChange;
-        var vertical = eventArgs.VerticalChange * AppSettings.AspectRatio;
-        var delta = Math.Abs(horizontal) >= Math.Abs(vertical)
-            ? horizontal
-            : vertical;
-        if (Math.Abs(delta) < 0.1)
+        if (!_isResizing)
         {
-            return;
+            _resizeStartWidth = Width;
+            _resizeStartCursor = GetCursorScreenPositionInDips();
+            _isResizing = true;
         }
 
         var workArea = GetCurrentMonitorWorkArea();
@@ -530,21 +545,61 @@ public partial class MainWindow : Window, IDisposable
                 Math.Min(
                     workArea.Width - 12,
                     (workArea.Height - 12) * AppSettings.AspectRatio)));
-        var nextWidth = Math.Min(
-            Math.Max(Width + delta, AppSettings.MinimumWidth),
+        var nextWidth = CalculateResizeWidth(
+            _resizeStartWidth,
+            _resizeStartCursor,
+            GetCursorScreenPositionInDips(),
+            AppSettings.AspectRatio,
+            AppSettings.MinimumWidth,
             maximumWidth);
         var nextHeight = nextWidth / AppSettings.AspectRatio;
 
-        _isResizing = true;
+        if (Math.Abs(nextWidth - Width) < 0.01
+            && Math.Abs(nextHeight - Height) < 0.01)
+        {
+            return;
+        }
+
         Width = nextWidth;
         Height = nextHeight;
         Left = Math.Min(Math.Max(Left, workArea.Left), Math.Max(workArea.Left, workArea.Right - Width));
         Top = Math.Min(Math.Max(Top, workArea.Top), Math.Max(workArea.Top, workArea.Bottom - Height));
-        _isResizing = false;
 
+        eventArgs.Handled = true;
+    }
+
+    private void ResizeGrip_DragCompleted(object sender, DragCompletedEventArgs eventArgs)
+    {
+        _isResizing = false;
         _placementSaveTimer.Stop();
         _placementSaveTimer.Start();
-        eventArgs.Handled = true;
+    }
+
+    internal static double CalculateResizeWidth(
+        double startWidth,
+        Point startCursor,
+        Point currentCursor,
+        double aspectRatio,
+        double minimumWidth,
+        double maximumWidth)
+    {
+        var horizontalDelta = currentCursor.X - startCursor.X;
+        var verticalDelta = (currentCursor.Y - startCursor.Y) * aspectRatio;
+        var delta = Math.Abs(horizontalDelta) >= Math.Abs(verticalDelta)
+            ? horizontalDelta
+            : verticalDelta;
+        return Math.Min(
+            Math.Max(startWidth + delta, minimumWidth),
+            maximumWidth);
+    }
+
+    private Point GetCursorScreenPositionInDips()
+    {
+        var screenPoint = PointToScreen(Mouse.GetPosition(this));
+        var dpi = VisualTreeHelper.GetDpi(this);
+        return new Point(
+            screenPoint.X / dpi.DpiScaleX,
+            screenPoint.Y / dpi.DpiScaleY);
     }
 
     private void ClampWindowToCurrentMonitor()
@@ -598,22 +653,50 @@ public partial class MainWindow : Window, IDisposable
             return;
         }
 
+        CancelPendingCardCopy();
         SelectItem(item);
         _pressedClipItem = item;
+        _cardDragStartPoint = eventArgs.GetPosition((FrameworkElement)sender);
+        _cardDragStartPointValid = true;
         _suppressCardClick = false;
 
         if (eventArgs.ClickCount == 2 && item.IsImage)
         {
             ShowImagePreview(item);
+            _cardDragStartPointValid = false;
             _suppressCardClick = true;
             eventArgs.Handled = true;
         }
     }
 
+    private void ClipItem_MouseMove(object sender, MouseEventArgs eventArgs)
+    {
+        if (_isCardDragging
+            || _pressedClipItem is null
+            || !_cardDragStartPointValid
+            || eventArgs.LeftButton != MouseButtonState.Pressed
+            || sender is not FrameworkElement { DataContext: ClipItem item } target
+            || !ReferenceEquals(item, _pressedClipItem))
+        {
+            return;
+        }
+
+        var point = eventArgs.GetPosition(target);
+        if (Math.Abs(point.X - _cardDragStartPoint.X)
+                < SystemParameters.MinimumHorizontalDragDistance
+            && Math.Abs(point.Y - _cardDragStartPoint.Y)
+                < SystemParameters.MinimumVerticalDragDistance)
+        {
+            return;
+        }
+
+        BeginCardDrag(item, target);
+    }
+
     private void ClipItem_MouseLeftButtonUp(object sender, MouseButtonEventArgs eventArgs)
     {
         var pressedItem = _pressedClipItem;
-        _pressedClipItem = null;
+        ResetCardPointer();
         if (_suppressCardClick)
         {
             _suppressCardClick = false;
@@ -629,6 +712,41 @@ public partial class MainWindow : Window, IDisposable
             ScheduleCardCopy(item);
             eventArgs.Handled = true;
         }
+    }
+
+    private void BeginCardDrag(ClipItem item, FrameworkElement target)
+    {
+        _isCardDragging = true;
+        _suppressCardClick = true;
+        ResetCardPointer();
+        CancelPendingCardCopy();
+
+        try
+        {
+            var dataObject = ClipboardService.BuildDragDataObject(item);
+            DragDrop.DoDragDrop(target, dataObject, DragDropEffects.Copy);
+        }
+        catch (Exception exception) when (
+            exception is FormatException
+            or IOException
+            or UnauthorizedAccessException
+            or InvalidOperationException
+            or NotSupportedException
+            or ArgumentException
+            or System.Runtime.InteropServices.ExternalException)
+        {
+            ShowToast("无法拖动这条记录", false);
+        }
+        finally
+        {
+            _isCardDragging = false;
+        }
+    }
+
+    private void ResetCardPointer()
+    {
+        _pressedClipItem = null;
+        _cardDragStartPointValid = false;
     }
 
     private void ScheduleCardCopy(ClipItem item)
@@ -675,6 +793,7 @@ public partial class MainWindow : Window, IDisposable
         }
 
         CancelPendingCardCopy();
+        ResetCardPointer();
         SelectItem(item);
         var menu = new ContextMenu
         {
