@@ -926,8 +926,8 @@ public sealed class ClipboardService : IClipboardService
                 uint unsignedIntegerValue => unsignedIntegerValue == 0,
                 long longValue => longValue == 0,
                 ulong unsignedLongValue => unsignedLongValue == 0,
-                byte[] bytes when bytes.Length >= sizeof(uint) =>
-                    BitConverter.ToUInt32(bytes, 0) == 0,
+                byte[] bytes => IsZeroFlagBytes(bytes, bytes.Length),
+                Stream stream => IsZeroFlagStream(stream),
                 string text when long.TryParse(
                     text,
                     System.Globalization.NumberStyles.Integer,
@@ -940,6 +940,81 @@ public sealed class ClipboardService : IClipboardService
         {
             return true;
         }
+    }
+
+    private static bool IsZeroFlagStream(Stream stream)
+    {
+        var originalPosition = stream.CanSeek ? stream.Position : -1;
+        try
+        {
+            if (stream.CanSeek)
+            {
+                stream.Position = 0;
+            }
+
+            var bytes = new byte[sizeof(ulong)];
+            var count = 0;
+            while (count < bytes.Length)
+            {
+                var read = stream.Read(bytes, count, bytes.Length - count);
+                if (read == 0)
+                {
+                    break;
+                }
+
+                count += read;
+            }
+
+            return IsZeroFlagBytes(bytes, count);
+        }
+        catch (IOException)
+        {
+            return true;
+        }
+        catch (NotSupportedException)
+        {
+            return true;
+        }
+        catch (ObjectDisposedException)
+        {
+            return true;
+        }
+        finally
+        {
+            if (originalPosition >= 0)
+            {
+                try
+                {
+                    stream.Position = originalPosition;
+                }
+                catch (IOException)
+                {
+                }
+                catch (NotSupportedException)
+                {
+                }
+                catch (ObjectDisposedException)
+                {
+                }
+            }
+        }
+    }
+
+    private static bool IsZeroFlagBytes(byte[] bytes, int count)
+    {
+        if (count <= 0)
+        {
+            return true;
+        }
+
+        ulong value = 0;
+        var length = Math.Min(count, sizeof(ulong));
+        for (var index = 0; index < length; index++)
+        {
+            value |= (ulong)bytes[index] << (index * 8);
+        }
+
+        return value == 0;
     }
 
     private static BitmapSource CopyToFrozenBitmap(BitmapSource source)

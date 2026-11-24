@@ -197,6 +197,36 @@ public sealed class ClipboardServiceTests
             ClipboardService.ShouldExcludeFromHistory(dataObject));
     }
 
+    [Theory]
+    [InlineData(new byte[] { 1, 0, 0, 0 })]
+    [InlineData(new byte[] { 0, 0, 0, 0, 0, 0, 0, 1 })]
+    public void ShouldExcludeFromHistory_ReadsAllowFlagFromMemoryStream(
+        byte[] bytes)
+    {
+        var stream = new MemoryStream(bytes);
+        stream.Position = stream.Length;
+        var dataObject = new StubDataObject();
+        dataObject.SetData("CanIncludeInClipboardHistory", stream);
+
+        Assert.False(ClipboardService.ShouldExcludeFromHistory(dataObject));
+        Assert.Equal(stream.Length, stream.Position);
+    }
+
+    [Theory]
+    [InlineData(new byte[] { 0, 0, 0, 0 })]
+    [InlineData(new byte[] { 0 })]
+    [InlineData(new byte[0])]
+    public void ShouldExcludeFromHistory_RejectsZeroMemoryStreamFlag(
+        byte[] bytes)
+    {
+        var dataObject = new StubDataObject();
+        dataObject.SetData(
+            "CanIncludeInClipboardHistory",
+            new MemoryStream(bytes));
+
+        Assert.True(ClipboardService.ShouldExcludeFromHistory(dataObject));
+    }
+
     private static byte[] EncodePng(int width, int height, byte[] pixels)
     {
         var bitmap = BitmapSource.Create(

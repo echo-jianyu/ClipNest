@@ -38,6 +38,8 @@ public sealed class HistoryStoreTests
             Assert.Equal(@"{\rtf1 round-trip}", loaded[0].Rtf);
             Assert.True(loaded[0].Pinned);
             Assert.Equal(ClipContentKind.Image, loaded[1].Kind);
+            Assert.Equal("图片", loaded[1].DisplayText);
+            Assert.Equal("图片", loaded[1].TooltipText);
             Assert.Equal(1, loaded[1].PixelWidth);
             Assert.Equal(1, loaded[1].PixelHeight);
             Assert.NotNull(loaded[1].ImagePngBase64);

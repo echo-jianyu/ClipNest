@@ -354,6 +354,7 @@ public sealed class ClipItem : ObservableObject
 
     public void NormalizeAfterLoad()
     {
+        RefreshPreviewText();
         ResetImagePreview();
         OnPropertyChanged(nameof(ImagePreview));
         OnPropertyChanged(nameof(DisplayText));

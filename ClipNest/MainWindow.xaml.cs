@@ -747,7 +747,15 @@ public partial class MainWindow : Window, IDisposable
             && !IsButtonSource(eventArgs.OriginalSource as DependencyObject))
         {
             SelectItem(item);
-            ScheduleCardCopy(item);
+            if (ShouldDelayCardCopy(item))
+            {
+                ScheduleCardCopy(item);
+            }
+            else
+            {
+                CopyCardImmediately(item);
+            }
+
             eventArgs.Handled = true;
         }
     }
@@ -792,6 +800,19 @@ public partial class MainWindow : Window, IDisposable
         _pendingCardCopyItem = item;
         _cardCopyTimer.Stop();
         _cardCopyTimer.Start();
+    }
+
+    internal static bool ShouldDelayCardCopy(ClipItem item)
+    {
+        return item.IsImage;
+    }
+
+    private void CopyCardImmediately(ClipItem item)
+    {
+        if (!_disposed && _viewModel.VisibleItems.Contains(item))
+        {
+            _viewModel.CopyFormattedCommand.Execute(item);
+        }
     }
 
     private void CardCopyTimer_Tick(object? sender, EventArgs eventArgs)
