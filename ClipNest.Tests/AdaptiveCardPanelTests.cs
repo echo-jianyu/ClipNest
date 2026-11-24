@@ -70,6 +70,7 @@ public sealed class AdaptiveCardPanelTests
                 Child = new TextBlock
                 {
                     Text = item.DisplayText,
+                    Width = 120,
                     FontSize = item.DisplayFontSize,
                     LineHeight = item.DisplayLineHeight,
                     TextWrapping = TextWrapping.Wrap
