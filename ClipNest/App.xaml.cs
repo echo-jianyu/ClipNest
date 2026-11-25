@@ -38,6 +38,8 @@ public partial class App : System.Windows.Application, IDisposable
     private IntPtr _trayMenuForegroundHook;
     private DateTime _trayMenuOpenedAtUtc;
     private HistoryStore? _historyStore;
+    private SettingsStore? _settingsStore;
+    private ClipboardService? _clipboardService;
     private MainViewModel? _viewModel;
     private AutoStartService? _autoStartService;
     private ThemeService? _themeService;
@@ -68,8 +70,8 @@ public partial class App : System.Windows.Application, IDisposable
             StartActivationListener();
 
             _historyStore = new HistoryStore(AppPaths.HistoryFile);
-            var settingsStore = new SettingsStore(AppPaths.SettingsFile);
-            var settings = await settingsStore.LoadAsync();
+            _settingsStore = new SettingsStore(AppPaths.SettingsFile);
+            var settings = await _settingsStore.LoadAsync();
             _themeService = new ThemeService(Dispatcher);
             _themeService.ApplyTheme(settings.ThemeMode);
             var history = await _historyStore.LoadAsync();
@@ -84,13 +86,13 @@ public partial class App : System.Windows.Application, IDisposable
                         out _)
                     ? null
                     : "无法更新开机自启动设置。";
-            var clipboardService = new ClipboardService();
-            _viewModel = new MainViewModel(clipboardService, history);
+            _clipboardService = new ClipboardService();
+            _viewModel = new MainViewModel(_clipboardService, history);
             _mainWindow = new MainWindow(
                 _viewModel,
-                clipboardService,
+                _clipboardService,
                 _historyStore,
-                settingsStore,
+                _settingsStore,
                 _autoStartService,
                 _themeService,
                 settings);
@@ -205,10 +207,17 @@ public partial class App : System.Windows.Application, IDisposable
         _trayDrawingIcon?.Dispose();
         _trayDrawingIcon = null;
         _mainWindow?.Dispose();
+        _mainWindow = null;
+        _viewModel?.Dispose();
+        _viewModel = null;
+        _clipboardService?.Dispose();
+        _clipboardService = null;
         _themeService?.Dispose();
         _themeService = null;
-        _viewModel?.Dispose();
         _historyStore?.Dispose();
+        _historyStore = null;
+        _settingsStore?.Dispose();
+        _settingsStore = null;
 
         if (_instanceMutex is not null)
         {

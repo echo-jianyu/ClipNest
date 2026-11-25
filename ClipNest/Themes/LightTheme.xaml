@@ -39,7 +39,7 @@
     <Color x:Key="ToastForegroundColor">#FFFFFFFF</Color>
     <Color x:Key="ToastHoverColor">#22FFFFFF</Color>
     <Color x:Key="PreviewOverlayColor">#F2F1F3F1</Color>
-    <Color x:Key="PreviewBadgeColor">#B3000000</Color>
+    <Color x:Key="PreviewBadgeColor">#80000000</Color>
     <Color x:Key="DimensionBadgeColor">#D91D282A</Color>
     <Color x:Key="ResizeGripColor">#FF9EAAA5</Color>
     <Color x:Key="OverlayButtonColor">#99000000</Color>

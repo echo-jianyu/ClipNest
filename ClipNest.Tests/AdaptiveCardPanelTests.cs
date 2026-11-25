@@ -125,7 +125,7 @@ public sealed class AdaptiveCardPanelTests
 
             Arrange(panel, 450);
 
-            Assert.Equal(220, card.ActualHeight);
+            Assert.Equal(150, card.ActualHeight);
         });
     }
 

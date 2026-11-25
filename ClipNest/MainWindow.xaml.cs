@@ -20,6 +20,10 @@ namespace ClipNest;
 public partial class MainWindow : Window, IDisposable
 {
     private const double WheelScaleFactor = 1.08;
+    private const double ImagePreviewWheelScaleFactor = 1.15;
+    private const double ImagePreviewInitialScale = 1;
+    private const double ImagePreviewMinimumScale = 0.2;
+    private const double ImagePreviewMaximumScale = 10;
 
     private readonly MainViewModel _viewModel;
     private readonly IClipboardService _clipboardService;
@@ -32,7 +36,6 @@ public partial class MainWindow : Window, IDisposable
     private readonly DispatcherTimer _historySaveTimer;
     private readonly DispatcherTimer _placementSaveTimer;
     private readonly DispatcherTimer _toastTimer;
-    private readonly DispatcherTimer _cardCopyTimer;
     private readonly HotKeyDefinition _hotKey;
 
     private bool _disposed;
@@ -46,13 +49,20 @@ public partial class MainWindow : Window, IDisposable
     private Point _cardDragStartPoint;
     private bool _cardDragStartPointValid;
     private bool _isCardDragging;
-    private ClipItem? _pendingCardCopyItem;
     private ClipItem? _selectedItem;
     private bool _suppressCardClick;
     private bool _selectionRefreshQueued;
     private HwndSource? _windowSource;
     private SettingsWindow? _settingsWindow;
     private bool _toastCanUndo;
+    private Matrix _imagePreviewMatrix = Matrix.Identity;
+    private Matrix _imagePreviewPanStartMatrix = Matrix.Identity;
+    private Point _imagePreviewPanStartPoint;
+    private Size _imagePreviewFittedContentSize;
+    private double _imagePreviewScale = ImagePreviewInitialScale;
+    private string _imagePreviewDimensionsText = string.Empty;
+    private bool _imagePreviewPointerDown;
+    private bool _imagePreviewPanning;
 
     public MainWindow(
         MainViewModel viewModel,
@@ -74,6 +84,7 @@ public partial class MainWindow : Window, IDisposable
         _hotKeyService = new HotKeyService();
 
         InitializeComponent();
+        DpiTextRendering.Apply(this);
         DataContext = _viewModel;
         _viewModel.ApplyDisplaySettings(_settings.CardFontSize);
         ApplySettings();
@@ -104,13 +115,6 @@ public partial class MainWindow : Window, IDisposable
         };
         _toastTimer.Tick += ToastTimer_Tick;
 
-        _cardCopyTimer = new DispatcherTimer(DispatcherPriority.Input)
-        {
-            Interval = TimeSpan.FromMilliseconds(
-                System.Windows.Forms.SystemInformation.DoubleClickTime)
-        };
-        _cardCopyTimer.Tick += CardCopyTimer_Tick;
-
         SourceInitialized += MainWindow_SourceInitialized;
         LocationChanged += MainWindow_PlacementChanged;
         SizeChanged += MainWindow_SizeChanged;
@@ -134,7 +138,6 @@ public partial class MainWindow : Window, IDisposable
             return;
         }
 
-        CancelPendingCardCopy();
         CloseImagePreview();
         if (_viewModel.IsSearchOpen)
         {
@@ -204,7 +207,6 @@ public partial class MainWindow : Window, IDisposable
     public async Task FlushAsync()
     {
         _historySaveTimer.Stop();
-        _cardCopyTimer.Stop();
         _placementSaveTimer.Stop();
 
         var result = await SaveHistoryAsync();
@@ -297,7 +299,6 @@ public partial class MainWindow : Window, IDisposable
         _windowSource = HwndSource.FromHwnd(handle);
         _windowSource?.AddHook(WindowMessageHook);
         _themeService.AttachToWindow(this);
-        UpdateTextRenderingMode();
         WindowPlacement.ExcludeFromAltTab(this);
 
         try
@@ -562,6 +563,12 @@ public partial class MainWindow : Window, IDisposable
 
     private void Window_PreviewMouseWheel(object sender, MouseWheelEventArgs eventArgs)
     {
+        if (ImagePreviewOverlay.Visibility == Visibility.Visible)
+        {
+            ZoomImagePreview(eventArgs);
+            return;
+        }
+
         if ((Keyboard.Modifiers & (ModifierKeys.Shift | ModifierKeys.Control)) != 0)
         {
             ResizeWithWheel(eventArgs);
@@ -733,7 +740,6 @@ public partial class MainWindow : Window, IDisposable
 
     private void MainWindow_DpiChanged(object sender, DpiChangedEventArgs eventArgs)
     {
-        UpdateTextRenderingMode();
         if (!_isResizing)
         {
             return;
@@ -742,16 +748,6 @@ public partial class MainWindow : Window, IDisposable
         _resizeStartWidth = Width;
         _resizeStartHeight = Height;
         _resizeStartCursor = GetCursorScreenPositionInDips();
-    }
-
-    private void UpdateTextRenderingMode()
-    {
-        var dpi = VisualTreeHelper.GetDpi(this);
-        TextOptions.SetTextFormattingMode(
-            this,
-            dpi.PixelsPerInchX > 96.5
-                ? TextFormattingMode.Ideal
-                : TextFormattingMode.Display);
     }
 
     private void ClampWindowToCurrentMonitor()
@@ -824,7 +820,6 @@ public partial class MainWindow : Window, IDisposable
             return;
         }
 
-        CancelPendingCardCopy();
         SelectItem(item);
         _pressedClipItem = item;
         _cardDragStartPoint = eventArgs.GetPosition((FrameworkElement)sender);
@@ -880,15 +875,7 @@ public partial class MainWindow : Window, IDisposable
             && !IsButtonSource(eventArgs.OriginalSource as DependencyObject))
         {
             SelectItem(item);
-            if (ShouldDelayCardCopy(item))
-            {
-                ScheduleCardCopy(item);
-            }
-            else
-            {
-                CopyCardImmediately(item);
-            }
-
+            CopyCardImmediately(item);
             eventArgs.Handled = true;
         }
     }
@@ -898,7 +885,6 @@ public partial class MainWindow : Window, IDisposable
         _isCardDragging = true;
         _suppressCardClick = true;
         ResetCardPointer();
-        CancelPendingCardCopy();
 
         try
         {
@@ -954,52 +940,12 @@ public partial class MainWindow : Window, IDisposable
         _cardDragStartPointValid = false;
     }
 
-    private void ScheduleCardCopy(ClipItem item)
-    {
-        _pendingCardCopyItem = item;
-        _cardCopyTimer.Stop();
-        _cardCopyTimer.Start();
-    }
-
-    internal static bool ShouldDelayCardCopy(ClipItem item)
-    {
-        return false;
-    }
-
     private void CopyCardImmediately(ClipItem item)
     {
         if (!_disposed && _viewModel.VisibleItems.Contains(item))
         {
             _viewModel.CopyFormattedCommand.Execute(item);
         }
-    }
-
-    private void CardCopyTimer_Tick(object? sender, EventArgs eventArgs)
-    {
-        _cardCopyTimer.Stop();
-        CopyPendingCard();
-    }
-
-    private void CopyPendingCard()
-    {
-        if (_disposed)
-        {
-            _pendingCardCopyItem = null;
-            return;
-        }
-
-        var item = _pendingCardCopyItem;
-        _pendingCardCopyItem = null;
-        if (item is not null && _viewModel.VisibleItems.Contains(item))
-        {
-            _viewModel.CopyFormattedCommand.Execute(item);
-        }
-    }
-
-    private void CancelPendingCardCopy()
-    {
-        _cardCopyTimer.Stop();
-        _pendingCardCopyItem = null;
     }
 
     private void ClipItem_MouseRightButtonUp(object sender, MouseButtonEventArgs eventArgs)
@@ -1009,7 +955,6 @@ public partial class MainWindow : Window, IDisposable
             return;
         }
 
-        CancelPendingCardCopy();
         ResetCardPointer();
         SelectItem(item);
         var menu = new ContextMenu
@@ -1311,7 +1256,6 @@ public partial class MainWindow : Window, IDisposable
 
     private void ShowImagePreview(ClipItem item)
     {
-        CancelPendingCardCopy();
         var bytes = item.GetImageBytes();
         if (bytes is null)
         {
@@ -1320,9 +1264,13 @@ public partial class MainWindow : Window, IDisposable
 
         try
         {
-            ImagePreviewLarge.Source = DecodeImage(bytes);
-            ImagePreviewDimensions.Text = item.ImageDimensionsLabel;
+            var image = ImageCodec.Decode(bytes);
+            ImagePreviewLarge.Source = image;
+            _imagePreviewDimensionsText = item.ImageDimensionsLabel;
             ImagePreviewOverlay.Visibility = Visibility.Visible;
+            ImagePreviewOverlay.UpdateLayout();
+            UpdateImagePreviewContentLayout(image);
+            ResetImagePreviewZoom();
             Activate();
         }
         catch (FormatException)
@@ -1337,21 +1285,300 @@ public partial class MainWindow : Window, IDisposable
 
     private void CloseImagePreview()
     {
+        if (ImagePreviewOverlay.IsMouseCaptured)
+        {
+            ImagePreviewOverlay.ReleaseMouseCapture();
+        }
+
+        if (ImagePreviewViewport.IsMouseCaptured)
+        {
+            ImagePreviewViewport.ReleaseMouseCapture();
+        }
+
         ImagePreviewOverlay.Visibility = Visibility.Collapsed;
         ImagePreviewLarge.Source = null;
+        ResetImagePreviewZoom();
+    }
+
+    private void ZoomImagePreview(MouseWheelEventArgs eventArgs)
+    {
+        if (eventArgs.Delta == 0)
+        {
+            return;
+        }
+
+        var scaleStep = Math.Pow(
+            ImagePreviewWheelScaleFactor,
+            eventArgs.Delta / 120d);
+        var nextScale = Math.Max(
+            ImagePreviewMinimumScale,
+            Math.Min(
+                ImagePreviewMaximumScale,
+                _imagePreviewScale * scaleStep));
+
+        if (Math.Abs(nextScale - _imagePreviewScale) < 0.0001)
+        {
+            eventArgs.Handled = true;
+            return;
+        }
+
+        var anchor = eventArgs.GetPosition(ImagePreviewViewport);
+        anchor.X = Math.Max(0, Math.Min(ImagePreviewViewport.ActualWidth, anchor.X));
+        anchor.Y = Math.Max(0, Math.Min(ImagePreviewViewport.ActualHeight, anchor.Y));
+
+        _imagePreviewMatrix = CalculateImagePreviewZoomMatrix(
+            _imagePreviewMatrix,
+            anchor,
+            nextScale);
+        _imagePreviewMatrix = ConstrainImagePreviewPanMatrix(
+            _imagePreviewMatrix,
+            new Size(
+                ImagePreviewViewport.ActualWidth,
+                ImagePreviewViewport.ActualHeight),
+            GetImagePreviewContentSize());
+        _imagePreviewScale = nextScale;
+        ImagePreviewTransform.Matrix = _imagePreviewMatrix;
+        UpdateImagePreviewCursor();
+        UpdateImagePreviewDimensions();
+        eventArgs.Handled = true;
+    }
+
+    internal static Matrix CalculateImagePreviewZoomMatrix(
+        Matrix current,
+        Point anchor,
+        double nextScale)
+    {
+        if (current.M11 <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(current));
+        }
+
+        if (nextScale <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(nextScale));
+        }
+
+        var anchorXInImage = (anchor.X - current.OffsetX) / current.M11;
+        var anchorYInImage = (anchor.Y - current.OffsetY) / current.M22;
+        return new Matrix(
+            nextScale,
+            0,
+            0,
+            nextScale,
+            anchor.X - (anchorXInImage * nextScale),
+            anchor.Y - (anchorYInImage * nextScale));
+    }
+
+    internal static Matrix ConstrainImagePreviewPanMatrix(
+        Matrix current,
+        Size viewport,
+        Size content)
+    {
+        if (current.M11 <= 0
+            || viewport.Width <= 0
+            || viewport.Height <= 0
+            || content.Width <= 0
+            || content.Height <= 0)
+        {
+            return current;
+        }
+
+        var scaleX = current.M11;
+        var scaleY = current.M22;
+        var scaledWidth = content.Width * scaleX;
+        var scaledHeight = content.Height * scaleY;
+
+        var minimumOffsetX = Math.Min(0, viewport.Width - scaledWidth);
+        var maximumOffsetX = Math.Max(0, viewport.Width - scaledWidth);
+        var minimumOffsetY = Math.Min(0, viewport.Height - scaledHeight);
+        var maximumOffsetY = Math.Max(0, viewport.Height - scaledHeight);
+        var offsetX = Math.Max(
+            minimumOffsetX,
+            Math.Min(maximumOffsetX, current.OffsetX));
+        var offsetY = Math.Max(
+            minimumOffsetY,
+            Math.Min(maximumOffsetY, current.OffsetY));
+
+        return new Matrix(
+            scaleX,
+            current.M12,
+            current.M21,
+            scaleY,
+            offsetX,
+            offsetY);
+    }
+
+    private void ResetImagePreviewZoom()
+    {
+        _imagePreviewScale = ImagePreviewInitialScale;
+        _imagePreviewPointerDown = false;
+        _imagePreviewPanning = false;
+        var viewportWidth = ImagePreviewViewport.ActualWidth;
+        var viewportHeight = ImagePreviewViewport.ActualHeight;
+        var offsetX = Math.Max(
+            0,
+            (viewportWidth - _imagePreviewFittedContentSize.Width) / 2);
+        var offsetY = Math.Max(
+            0,
+            (viewportHeight - _imagePreviewFittedContentSize.Height) / 2);
+        _imagePreviewMatrix = new Matrix(1, 0, 0, 1, offsetX, offsetY);
+        if (ImagePreviewTransform is not null)
+        {
+            ImagePreviewTransform.Matrix = _imagePreviewMatrix;
+        }
+
+        UpdateImagePreviewCursor();
+        UpdateImagePreviewDimensions();
+    }
+
+    private Size GetImagePreviewContentSize()
+    {
+        return _imagePreviewFittedContentSize;
+    }
+
+    private void UpdateImagePreviewContentLayout(BitmapSource bitmap)
+    {
+        var viewportWidth = ImagePreviewViewport.ActualWidth;
+        var viewportHeight = ImagePreviewViewport.ActualHeight;
+        if (bitmap.PixelWidth <= 0
+            || bitmap.PixelHeight <= 0
+            || viewportWidth <= 0
+            || viewportHeight <= 0)
+        {
+            _imagePreviewFittedContentSize = Size.Empty;
+            ImagePreviewLarge.Width = 0;
+            ImagePreviewLarge.Height = 0;
+            return;
+        }
+
+        var fitScale = Math.Min(
+            viewportWidth / bitmap.PixelWidth,
+            viewportHeight / bitmap.PixelHeight);
+        _imagePreviewFittedContentSize = new Size(
+            bitmap.PixelWidth * fitScale,
+            bitmap.PixelHeight * fitScale);
+        ImagePreviewLarge.Width = _imagePreviewFittedContentSize.Width;
+        ImagePreviewLarge.Height = _imagePreviewFittedContentSize.Height;
+    }
+
+    private void UpdateImagePreviewCursor()
+    {
+        ImagePreviewViewport.Cursor = Cursors.SizeAll;
+    }
+
+    private void UpdateImagePreviewDimensions()
+    {
+        ImagePreviewDimensions.Text = string.IsNullOrEmpty(_imagePreviewDimensionsText)
+            ? string.Empty
+            : $"{_imagePreviewDimensionsText} · {_imagePreviewScale * 100:0}%";
     }
 
     private void ImagePreviewOverlay_MouseLeftButtonDown(
         object sender,
         MouseButtonEventArgs eventArgs)
     {
-        if (IsButtonSource(eventArgs.OriginalSource as DependencyObject))
+        if (IsButtonSource(eventArgs.OriginalSource as DependencyObject)
+            || !ReferenceEquals(eventArgs.OriginalSource, ImagePreviewOverlay))
         {
             return;
         }
 
         CloseImagePreview();
         eventArgs.Handled = true;
+    }
+
+    private void ImagePreviewViewport_PreviewMouseLeftButtonDown(
+        object sender,
+        MouseButtonEventArgs eventArgs)
+    {
+        if (eventArgs.ClickCount >= 2)
+        {
+            CloseImagePreview();
+            eventArgs.Handled = true;
+            return;
+        }
+
+        _imagePreviewPointerDown = true;
+        _imagePreviewPanning = false;
+        _imagePreviewPanStartPoint = eventArgs.GetPosition(ImagePreviewViewport);
+        _imagePreviewPanStartMatrix = _imagePreviewMatrix;
+        ImagePreviewViewport.CaptureMouse();
+        eventArgs.Handled = true;
+    }
+
+    private void ImagePreviewViewport_PreviewMouseMove(
+        object sender,
+        MouseEventArgs eventArgs)
+    {
+        if (!_imagePreviewPointerDown
+            || eventArgs.LeftButton != MouseButtonState.Pressed)
+        {
+            return;
+        }
+
+        var point = eventArgs.GetPosition(ImagePreviewViewport);
+        if (!_imagePreviewPanning)
+        {
+            if (Math.Abs(point.X - _imagePreviewPanStartPoint.X)
+                    < SystemParameters.MinimumHorizontalDragDistance
+                && Math.Abs(point.Y - _imagePreviewPanStartPoint.Y)
+                    < SystemParameters.MinimumVerticalDragDistance)
+            {
+                return;
+            }
+
+            _imagePreviewPanning = true;
+            ImagePreviewViewport.Cursor = Cursors.ScrollAll;
+        }
+
+        var nextMatrix = new Matrix(
+            _imagePreviewPanStartMatrix.M11,
+            _imagePreviewPanStartMatrix.M12,
+            _imagePreviewPanStartMatrix.M21,
+            _imagePreviewPanStartMatrix.M22,
+            _imagePreviewPanStartMatrix.OffsetX
+                + point.X
+                - _imagePreviewPanStartPoint.X,
+            _imagePreviewPanStartMatrix.OffsetY
+                + point.Y
+                - _imagePreviewPanStartPoint.Y);
+        _imagePreviewMatrix = ConstrainImagePreviewPanMatrix(
+            nextMatrix,
+            new Size(
+                ImagePreviewViewport.ActualWidth,
+                ImagePreviewViewport.ActualHeight),
+            GetImagePreviewContentSize());
+        ImagePreviewTransform.Matrix = _imagePreviewMatrix;
+        eventArgs.Handled = true;
+    }
+
+    private void ImagePreviewViewport_PreviewMouseLeftButtonUp(
+        object sender,
+        MouseButtonEventArgs eventArgs)
+    {
+        if (!_imagePreviewPointerDown)
+        {
+            return;
+        }
+
+        _imagePreviewPointerDown = false;
+        _imagePreviewPanning = false;
+        if (ImagePreviewViewport.IsMouseCaptured)
+        {
+            ImagePreviewViewport.ReleaseMouseCapture();
+        }
+
+        UpdateImagePreviewCursor();
+        eventArgs.Handled = true;
+    }
+
+    private void ImagePreviewViewport_LostMouseCapture(
+        object sender,
+        MouseEventArgs eventArgs)
+    {
+        _imagePreviewPointerDown = false;
+        _imagePreviewPanning = false;
+        UpdateImagePreviewCursor();
     }
 
     private void ImagePreviewCloseButton_Click(
@@ -1652,18 +1879,6 @@ public partial class MainWindow : Window, IDisposable
         return false;
     }
 
-    private static BitmapImage DecodeImage(byte[] bytes)
-    {
-        using var stream = new MemoryStream(bytes, writable: false);
-        var bitmap = new BitmapImage();
-        bitmap.BeginInit();
-        bitmap.CacheOption = BitmapCacheOption.OnLoad;
-        bitmap.StreamSource = stream;
-        bitmap.EndInit();
-        bitmap.Freeze();
-        return bitmap;
-    }
-
     private void MainWindow_Closing(object? sender, CancelEventArgs eventArgs)
     {
         if (Application.Current is App { IsShuttingDown: true })
@@ -1691,8 +1906,6 @@ public partial class MainWindow : Window, IDisposable
         _historySaveTimer.Stop();
         _placementSaveTimer.Stop();
         _toastTimer.Stop();
-        _cardCopyTimer.Stop();
-        CancelPendingCardCopy();
         _selectionRefreshQueued = false;
         _windowSource?.RemoveHook(WindowMessageHook);
         _windowSource = null;
@@ -1704,8 +1917,6 @@ public partial class MainWindow : Window, IDisposable
         _hotKeyService.Pressed -= HotKeyService_Pressed;
         _hotKeyService.Dispose();
         _clipboardService.Detach();
-        _clipboardService.Dispose();
-        _settingsStore.Dispose();
     }
 
     public void Dispose()

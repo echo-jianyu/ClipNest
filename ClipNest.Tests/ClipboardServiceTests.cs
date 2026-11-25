@@ -49,6 +49,33 @@ public sealed class ClipboardServiceTests
             now));
     }
 
+    [Theory]
+    [InlineData(null, 10u, false, false, 0, false)]
+    [InlineData(10u, 11u, false, false, 0, false)]
+    [InlineData(10u, 10u, true, false, 0, false)]
+    [InlineData(10u, 10u, false, true, 0, false)]
+    [InlineData(10u, 10u, false, false, 5, false)]
+    [InlineData(10u, 10u, false, false, 0, true)]
+    [InlineData(10u, 10u, false, false, 4, true)]
+    public void ShouldRetryPendingCapture_OnlySchedulesIdlePendingSequence(
+        uint? pendingSequence,
+        uint sequence,
+        bool isCaptureRunning,
+        bool isCaptureScheduled,
+        int pollAttempts,
+        bool expected)
+    {
+        Assert.Equal(
+            expected,
+            ClipboardService.ShouldRetryPendingCapture(
+                pendingSequence,
+                sequence,
+                isCaptureRunning,
+                isCaptureScheduled,
+                pollAttempts,
+                maximumPollAttempts: 5));
+    }
+
     [Fact]
     public void HasVisiblePixels_RejectsFullyTransparentImage()
     {

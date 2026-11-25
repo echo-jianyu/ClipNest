@@ -144,9 +144,9 @@ internal static class Program
         }
 
         var tempDirectory = Path.Combine(Path.GetTempPath(), $"ClipNest.UiSnapshot.{Guid.NewGuid():N}");
-        var historyStore = new HistoryStore(Path.Combine(tempDirectory, "history.json"));
-        var settingsStore = new SettingsStore(Path.Combine(tempDirectory, "settings.json"));
-        var clipboard = new PreviewClipboardService();
+        using var historyStore = new HistoryStore(Path.Combine(tempDirectory, "history.json"));
+        using var settingsStore = new SettingsStore(Path.Combine(tempDirectory, "settings.json"));
+        using var clipboard = new PreviewClipboardService();
         var previewWidth = wideMode ? 600 : compactMode ? 320 : 400;
         var previewHeight = compactMode ? 240 : 400;
         using var viewModel = new MainViewModel(clipboard, []);
@@ -256,7 +256,6 @@ internal static class Program
         encoder.Save(stream);
 
         window.Dispose();
-        historyStore.Dispose();
         application.Shutdown();
         Console.WriteLine($"Wrote {outputPath}");
     }

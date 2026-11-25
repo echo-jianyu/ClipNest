@@ -88,6 +88,17 @@
         <Setter Property="Fill" Value="Transparent" />
     </Style>
 
+    <Style x:Key="ImageInfoBadgeStyle" TargetType="{x:Type Border}">
+        <Setter Property="Background" Value="{DynamicResource PreviewBadgeBrush}" />
+        <Setter Property="CornerRadius" Value="5" />
+        <Setter Property="Padding" Value="6,2" />
+    </Style>
+
+    <Style x:Key="ImageInfoTextStyle" TargetType="{x:Type TextBlock}">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="Foreground" Value="{DynamicResource ToastForegroundBrush}" />
+    </Style>
+
     <Style x:Key="OverlayIconButtonStyle" TargetType="{x:Type Button}">
         <Setter Property="Width" Value="27" />
         <Setter Property="Height" Value="27" />

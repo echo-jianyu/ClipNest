@@ -1,7 +1,6 @@
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.InteropServices;
-using System.Security.Cryptography;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media.Imaging;
@@ -21,6 +20,7 @@ public sealed class ClipboardService : IClipboardService
     private const int CaptureAttempts = 10;
     private const int CaptureRetryDelayMilliseconds = 75;
     private const int ClipboardPollIntervalMilliseconds = 1000;
+    private const int MaxPendingCapturePollAttempts = 5;
     internal const int MaxCapturedTextCharacters = 1_000_000;
     private const string InternalCopyFormat = "ClipNest.InternalCopy";
     private const string ExcludeFromMonitorFormat =
@@ -46,6 +46,8 @@ public sealed class ClipboardService : IClipboardService
     private string? _ownCopySignature;
     private DateTime _ownCopyExpiryUtc;
     private bool _copyWriteInProgress;
+    private bool _isCaptureRunning;
+    private int _pendingCapturePollAttempts;
     private CancellationTokenSource? _captureCancellation;
     private Thread? _clipboardThread;
     private Dispatcher? _clipboardDispatcher;
@@ -95,6 +97,7 @@ public sealed class ClipboardService : IClipboardService
         EnsureClipboardThread();
         _lastObservedSequence = NativeMethods.GetClipboardSequenceNumber();
         _pendingCaptureSequence = _lastObservedSequence;
+        _pendingCapturePollAttempts = 0;
         StartClipboardPolling();
         ScheduleClipboardCapture();
     }
@@ -113,6 +116,8 @@ public sealed class ClipboardService : IClipboardService
         _captureCancellation?.Cancel();
         _captureCancellation?.Dispose();
         _captureCancellation = null;
+        _isCaptureRunning = false;
+        _pendingCapturePollAttempts = 0;
         _lastObservedSequence = null;
         _pendingCaptureSequence = null;
         NativeMethods.RemoveClipboardFormatListener(_windowHandle);
@@ -141,21 +146,24 @@ public sealed class ClipboardService : IClipboardService
             _copyWriteInProgress = true;
         }
 
-        return RunOnClipboardThreadAsync(
-            () =>
+        return CopyAsyncCore(item, includeFormatting);
+    }
+
+    private async Task<bool> CopyAsyncCore(ClipItem item, bool includeFormatting)
+    {
+        try
+        {
+            return await RunOnClipboardThreadAsync(
+                    () => CopyCore(item, includeFormatting))
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            lock (_copyStateLock)
             {
-                try
-                {
-                    return CopyCore(item, includeFormatting);
-                }
-                finally
-                {
-                    lock (_copyStateLock)
-                    {
-                        _copyWriteInProgress = false;
-                    }
-                }
-            });
+                _copyWriteInProgress = false;
+            }
+        }
     }
 
     private bool CopyCore(ClipItem item, bool includeFormatting)
@@ -200,22 +208,18 @@ public sealed class ClipboardService : IClipboardService
         return succeeded;
     }
 
-    private Task<T> RunOnClipboardThreadAsync<T>(Func<T> operation)
+    private async Task<T> RunOnClipboardThreadAsync<T>(Func<T> operation)
     {
         var dispatcher = EnsureClipboardThread();
-        var completion = new TaskCompletionSource<T>();
-        dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() =>
+        if (dispatcher.HasShutdownStarted || dispatcher.HasShutdownFinished)
         {
-            try
-            {
-                completion.TrySetResult(operation());
-            }
-            catch (Exception exception)
-            {
-                completion.TrySetException(exception);
-            }
-        }));
-        return completion.Task;
+            throw new ObjectDisposedException(nameof(ClipboardService));
+        }
+
+        return await dispatcher
+            .InvokeAsync(operation, DispatcherPriority.Normal)
+            .Task
+            .ConfigureAwait(false);
     }
 
     private Dispatcher EnsureClipboardThread()
@@ -339,7 +343,7 @@ public sealed class ClipboardService : IClipboardService
         {
             var bytes = item.GetImageBytes()
                 ?? throw new InvalidOperationException("Image data is missing.");
-            var image = DecodeImage(bytes);
+            var image = ImageCodec.Decode(bytes);
             dataObject.SetData(WpfDataFormats.Bitmap, image);
 
             // Delayed-rendering clipboard providers may keep this stream alive
@@ -374,10 +378,10 @@ public sealed class ClipboardService : IClipboardService
     {
         var directory = Path.Combine(Path.GetTempPath(), "ClipNest", "drag");
         Directory.CreateDirectory(directory);
-        CleanupOldDragFiles(directory);
+        _ = Task.Run(() => CleanupOldDragFiles(directory));
 
-        var fileName = GetImageHash(signature, bytes);
-        var path = Path.Combine(directory, $"{fileName}.png");
+        var fileName = ContentHashing.CreateImageFileName(signature, bytes);
+        var path = Path.Combine(directory, fileName);
         if (File.Exists(path))
         {
             return path;
@@ -457,33 +461,6 @@ public sealed class ClipboardService : IClipboardService
         }
     }
 
-    private static string GetImageHash(string signature, byte[] bytes)
-    {
-        const string imagePrefix = "Image:";
-        if (signature.StartsWith(imagePrefix, StringComparison.Ordinal)
-            && signature.Length == imagePrefix.Length + 64
-            && signature.Skip(imagePrefix.Length).All(Uri.IsHexDigit))
-        {
-            return signature.Substring(imagePrefix.Length).ToLowerInvariant();
-        }
-
-        using var sha256 = SHA256.Create();
-        var hash = sha256.ComputeHash(bytes);
-        return BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant();
-    }
-
-    private static BitmapImage DecodeImage(byte[] bytes)
-    {
-        using var stream = new MemoryStream(bytes, writable: false);
-        var bitmap = new BitmapImage();
-        bitmap.BeginInit();
-        bitmap.CacheOption = BitmapCacheOption.OnLoad;
-        bitmap.StreamSource = stream;
-        bitmap.EndInit();
-        bitmap.Freeze();
-        return bitmap;
-    }
-
     private IntPtr WindowMessageHook(
         IntPtr hwnd,
         int message,
@@ -535,12 +512,41 @@ public sealed class ClipboardService : IClipboardService
             return;
         }
 
-        if (_pendingCaptureSequence == sequence)
+        if (!ShouldRetryPendingCapture(
+                _pendingCaptureSequence,
+                sequence,
+                _isCaptureRunning,
+                _captureTimer?.IsEnabled == true,
+                _pendingCapturePollAttempts,
+                MaxPendingCapturePollAttempts))
         {
-            // Clipboard providers can publish delayed data after a transient
-            // window closes, so retry until the pending sequence is resolved.
-            ScheduleClipboardCapture();
+            if (_pendingCaptureSequence == sequence
+                && !_isCaptureRunning
+                && _captureTimer?.IsEnabled != true
+                && _pendingCapturePollAttempts >= MaxPendingCapturePollAttempts)
+            {
+                MarkCaptureComplete(sequence);
+            }
+
+            return;
         }
+
+        _pendingCapturePollAttempts++;
+        ScheduleClipboardCapture();
+    }
+
+    internal static bool ShouldRetryPendingCapture(
+        uint? pendingSequence,
+        uint sequence,
+        bool isCaptureRunning,
+        bool isCaptureScheduled,
+        int pollAttempts,
+        int maximumPollAttempts)
+    {
+        return pendingSequence == sequence
+            && !isCaptureRunning
+            && !isCaptureScheduled
+            && pollAttempts < maximumPollAttempts;
     }
 
     private void ObserveClipboardSequence(uint sequence)
@@ -560,6 +566,7 @@ public sealed class ClipboardService : IClipboardService
         }
 
         _pendingCaptureSequence = sequence;
+        _pendingCapturePollAttempts = 0;
         ScheduleClipboardCapture();
     }
 
@@ -568,10 +575,29 @@ public sealed class ClipboardService : IClipboardService
         if (_pendingCaptureSequence == sequence)
         {
             _pendingCaptureSequence = null;
+            _pendingCapturePollAttempts = 0;
         }
     }
 
     private async Task CaptureClipboardAsync(
+        uint sequence,
+        CancellationTokenSource cancellationSource)
+    {
+        try
+        {
+            await CaptureClipboardCoreAsync(sequence, cancellationSource.Token)
+                .ConfigureAwait(true);
+        }
+        finally
+        {
+            if (ReferenceEquals(_captureCancellation, cancellationSource))
+            {
+                _isCaptureRunning = false;
+            }
+        }
+    }
+
+    private async Task CaptureClipboardCoreAsync(
         uint sequence,
         CancellationToken cancellationToken)
     {
@@ -707,9 +733,10 @@ public sealed class ClipboardService : IClipboardService
                 }
 
                 _captureCancellation = new CancellationTokenSource();
+                _isCaptureRunning = true;
                 _ = CaptureClipboardAsync(
                     sequence.Value,
-                    _captureCancellation.Token);
+                    _captureCancellation);
             };
         }
 
@@ -813,10 +840,10 @@ public sealed class ClipboardService : IClipboardService
             }
 
             var pngBytes = TryReadBytes(pngData);
-            if (pngBytes is not null
-                && IsUsableClipboardBitmap(TryDecodeImage(pngBytes)))
+            var decodedPng = ImageCodec.TryDecode(pngBytes);
+            if (IsUsableClipboardBitmap(decodedPng))
             {
-                return ClipboardSnapshot.FromPng(pngBytes, text, rtf, html);
+                return ClipboardSnapshot.FromBitmap(decodedPng!, text, rtf, html);
             }
         }
 
@@ -1097,26 +1124,20 @@ public sealed class ClipboardService : IClipboardService
                 : ClipContent.FromText(snapshot.Text!, snapshot.Rtf, snapshot.Html);
         }
 
-        BitmapSource? source = null;
+        BitmapSource? source = snapshot.Bitmap;
         try
         {
-            if (snapshot.PngBytes is not null)
-            {
-                source = TryDecodeImage(snapshot.PngBytes);
-            }
-
-            if (source is null && snapshot.Bitmap is not null)
-            {
-                source = snapshot.Bitmap;
-            }
-
             if (source is null && snapshot.FormsImage is not null)
             {
                 using var stream = new MemoryStream();
                 snapshot.FormsImage.Save(
                     stream,
                     System.Drawing.Imaging.ImageFormat.Png);
-                source = TryDecodeImage(stream.ToArray());
+                var decoded = ImageCodec.TryDecode(stream.ToArray());
+                if (IsUsableClipboardBitmap(decoded))
+                {
+                    source = decoded;
+                }
             }
         }
         catch (Exception exception) when (
@@ -1126,7 +1147,7 @@ public sealed class ClipboardService : IClipboardService
         {
         }
 
-        if (source is not null && IsUsableClipboardBitmap(source))
+        if (source is not null)
         {
             var normalized = NormalizeImage(source);
             return ClipContent.FromImage(
@@ -1147,7 +1168,6 @@ public sealed class ClipboardService : IClipboardService
             string? rtf,
             string? html,
             bool isImage,
-            byte[]? pngBytes = null,
             BitmapSource? bitmap = null,
             System.Drawing.Image? formsImage = null)
         {
@@ -1155,7 +1175,6 @@ public sealed class ClipboardService : IClipboardService
             Rtf = rtf;
             Html = html;
             IsImage = isImage;
-            PngBytes = pngBytes;
             Bitmap = bitmap;
             FormsImage = formsImage;
         }
@@ -1168,8 +1187,6 @@ public sealed class ClipboardService : IClipboardService
 
         public bool IsImage { get; }
 
-        public byte[]? PngBytes { get; }
-
         public BitmapSource? Bitmap { get; }
 
         public System.Drawing.Image? FormsImage { get; }
@@ -1180,20 +1197,6 @@ public sealed class ClipboardService : IClipboardService
             string? html)
         {
             return new ClipboardSnapshot(text, rtf, html, isImage: false);
-        }
-
-        public static ClipboardSnapshot FromPng(
-            byte[] pngBytes,
-            string? text,
-            string? rtf,
-            string? html)
-        {
-            return new ClipboardSnapshot(
-                text,
-                rtf,
-                html,
-                isImage: true,
-                pngBytes: pngBytes);
         }
 
         public static ClipboardSnapshot FromBitmap(
@@ -1261,27 +1264,7 @@ public sealed class ClipboardService : IClipboardService
 
     private static BitmapImage? TryDecodeImage(byte[]? bytes)
     {
-        if (bytes is null || bytes.Length == 0)
-        {
-            return null;
-        }
-
-        try
-        {
-            return DecodeImage(bytes);
-        }
-        catch (FileFormatException)
-        {
-            return null;
-        }
-        catch (NotSupportedException)
-        {
-            return null;
-        }
-        catch (ArgumentException)
-        {
-            return null;
-        }
+        return ImageCodec.TryDecode(bytes);
     }
 
     internal static bool HasVisiblePixels(byte[]? pngBytes)
@@ -1293,17 +1276,12 @@ public sealed class ClipboardService : IClipboardService
 
         try
         {
-            return HasVisiblePixels(DecodeImage(pngBytes));
+            return HasVisiblePixels(ImageCodec.Decode(pngBytes));
         }
-        catch (FileFormatException)
-        {
-            return false;
-        }
-        catch (NotSupportedException)
-        {
-            return false;
-        }
-        catch (ArgumentException)
+        catch (Exception exception) when (
+            exception is FileFormatException
+            or NotSupportedException
+            or ArgumentException)
         {
             return false;
         }
@@ -1391,12 +1369,10 @@ public sealed class ClipboardService : IClipboardService
             output = transformed;
         }
 
-        var encoder = new PngBitmapEncoder();
-        encoder.Frames.Add(BitmapFrame.Create(output));
-
-        using var stream = new MemoryStream();
-        encoder.Save(stream);
-        return (stream.ToArray(), output.PixelWidth, output.PixelHeight);
+        return (
+            ImageCodec.EncodePng(output),
+            output.PixelWidth,
+            output.PixelHeight);
     }
 
     private static BitmapSource RepairClipboardAlpha(BitmapSource source)
@@ -1413,21 +1389,20 @@ public sealed class ClipboardService : IClipboardService
         converted.CopyPixels(pixels, stride, 0);
 
         var hasVisibleColor = false;
-        var hasVisibleAlpha = false;
         for (var index = 0; index < pixels.Length; index += 4)
         {
+            if (pixels[index + 3] != 0)
+            {
+                return converted;
+            }
+
             if (pixels[index] != 0 || pixels[index + 1] != 0 || pixels[index + 2] != 0)
             {
                 hasVisibleColor = true;
             }
-
-            if (pixels[index + 3] != 0)
-            {
-                hasVisibleAlpha = true;
-            }
         }
 
-        if (!hasVisibleColor || hasVisibleAlpha)
+        if (!hasVisibleColor)
         {
             return converted;
         }

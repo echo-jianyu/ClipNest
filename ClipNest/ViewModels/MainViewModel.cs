@@ -268,14 +268,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
 
         _items.Clear();
-        _visibleItems.Clear();
         _lastDeletedItem = null;
         CloseAllEditors();
+        ApplyFilter();
         UndoDeleteCommand.RaiseCanExecuteChanged();
         OnPropertyChanged(nameof(CanUndoDelete));
-        OnPropertyChanged(nameof(HasVisibleItems));
-        OnPropertyChanged(nameof(EmptyStateTitle));
-        OnPropertyChanged(nameof(EmptyStateDetail));
         NotifyHistoryChanged();
         NotificationRequested?.Invoke("历史记录已清空", false);
     }
@@ -456,7 +453,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 return;
             }
 
-            var image = DecodeImage(bytes);
+            var image = ImageCodec.Decode(bytes);
             EditingImageItem = item;
             _workingImage = image;
             ImageEditPreview = image;
@@ -479,10 +476,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
-        var rotated = new TransformedBitmap(
-            _workingImage,
-            new RotateTransform(angle));
-        rotated.Freeze();
+        var rotated = ImageCodec.Rotate(_workingImage, angle);
         _workingImage = rotated;
         ImageEditPreview = rotated;
     }
@@ -494,11 +488,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
-        var encoder = new PngBitmapEncoder();
-        encoder.Frames.Add(BitmapFrame.Create(_workingImage));
-        using var stream = new MemoryStream();
-        encoder.Save(stream);
-        var bytes = stream.ToArray();
+        var bytes = ImageCodec.EncodePng(_workingImage);
         var content = ClipContent.FromImage(
             bytes,
             _workingImage.PixelWidth,
@@ -666,10 +656,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         var query = SearchText.Trim();
         var matches = _items.Where(item => MatchesFilter(item, query)).ToList();
+        var matchSet = new HashSet<ClipItem>(matches);
 
         for (var index = _visibleItems.Count - 1; index >= 0; index--)
         {
-            if (!matches.Contains(_visibleItems[index]))
+            if (!matchSet.Contains(_visibleItems[index]))
             {
                 _visibleItems.RemoveAt(index);
             }
@@ -745,18 +736,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         CloseImageEditor();
     }
 
-    private static BitmapImage DecodeImage(byte[] bytes)
-    {
-        using var stream = new MemoryStream(bytes, writable: false);
-        var bitmap = new BitmapImage();
-        bitmap.BeginInit();
-        bitmap.CacheOption = BitmapCacheOption.OnLoad;
-        bitmap.StreamSource = stream;
-        bitmap.EndInit();
-        bitmap.Freeze();
-        return bitmap;
-    }
-
     private void NotifyHistoryChanged()
     {
         OnPropertyChanged(nameof(HasItems));
@@ -765,27 +744,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     internal void ApplyExternalizedImages(HistorySaveResult result)
     {
-        if (result.ExternalizedImages.Count == 0)
-        {
-            return;
-        }
-
-        var itemsById = new Dictionary<Guid, ClipItem>();
-        foreach (var item in _items)
-        {
-            itemsById[item.Id] = item;
-        }
-
-        foreach (var image in result.ExternalizedImages)
-        {
-            if (itemsById.TryGetValue(image.ItemId, out var item))
-            {
-                item.TryAttachExternalImage(
-                    image.ImagePath,
-                    image.Signature,
-                    image.InlineImagePngBase64);
-            }
-        }
+        HistoryStore.ApplyExternalizedImages(_items, result);
     }
 
     public void Dispose()

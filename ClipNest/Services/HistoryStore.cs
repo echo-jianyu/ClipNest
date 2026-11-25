@@ -2,7 +2,6 @@ using System.Globalization;
 using System.IO;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
-using System.Security.Cryptography;
 using ClipNest.Infrastructure;
 using ClipNest.Models;
 
@@ -96,8 +95,6 @@ public sealed class HistoryStore : IDisposable
 
         var snapshots = items.Select(ClipItemSnapshot.FromItem).ToList();
         var saveVersion = Interlocked.Increment(ref _lastSaveVersion);
-        await Task.Delay(1, cancellationToken).ConfigureAwait(false);
-
         await _writeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -435,7 +432,7 @@ public sealed class HistoryStore : IDisposable
                 continue;
             }
 
-            var fileName = CreateImageFileName(item.Signature, bytes);
+            var fileName = ContentHashing.CreateImageFileName(item.Signature, bytes);
             var imagePath = Path.Combine(_imagesDirectory, fileName);
             referencedImages.Add(fileName);
 
@@ -495,21 +492,6 @@ public sealed class HistoryStore : IDisposable
                 Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar),
                 Path.GetFullPath(_imagesDirectory).TrimEnd(Path.DirectorySeparatorChar),
                 StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string CreateImageFileName(string signature, byte[] bytes)
-    {
-        const string imagePrefix = "Image:";
-        if (signature.StartsWith(imagePrefix, StringComparison.Ordinal)
-            && signature.Length == imagePrefix.Length + 64
-            && signature.Skip(imagePrefix.Length).All(Uri.IsHexDigit))
-        {
-            return $"{signature.Substring(imagePrefix.Length).ToLowerInvariant()}.png";
-        }
-
-        using var sha256 = SHA256.Create();
-        var hash = sha256.ComputeHash(bytes);
-        return $"{BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant()}.png";
     }
 
     private void DeleteOrphanedImages(HashSet<string> referencedImages)

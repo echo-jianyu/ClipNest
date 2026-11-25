@@ -10,7 +10,7 @@ public sealed class AdaptiveCardPanel : Panel
     private const double Gap = 7;
     private const double MinimumTextCardHeight = 40;
     private const double MinimumImageCardHeight = 48;
-    private const double MaximumImageCardHeight = 220;
+    private const double MaximumImageCardHeight = 150;
     private readonly List<CardPlacement> _placements = [];
     private readonly Dictionary<UIElement, ClipItem> _observedItems = [];
 
@@ -31,7 +31,11 @@ public sealed class AdaptiveCardPanel : Panel
         var finalHeight = isImage
             ? Math.Min(measuredHeight, MaximumImageCardHeight)
             : measuredHeight;
-        child.Measure(new Size(cardWidth, finalHeight));
+        if (Math.Abs(finalHeight - child.DesiredSize.Height) > 0.01)
+        {
+            child.Measure(new Size(cardWidth, finalHeight));
+        }
+
         return finalHeight;
     }
 
@@ -151,7 +155,7 @@ public sealed class AdaptiveCardPanel : Panel
         }
     }
 
-    private sealed class CardPlacement
+    private readonly struct CardPlacement
     {
         public CardPlacement(
             UIElement child,

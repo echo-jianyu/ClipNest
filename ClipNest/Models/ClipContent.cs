@@ -1,5 +1,4 @@
-using System.Security.Cryptography;
-using System.Text;
+using ClipNest.Infrastructure;
 
 namespace ClipNest.Models;
 
@@ -77,13 +76,11 @@ public sealed class ClipContent
 
     private static string CreateSignature(ClipContentKind kind, string text)
     {
-        return CreateSignature(kind, Encoding.UTF8.GetBytes(text));
+        return $"{kind}:{ContentHashing.ComputeSha256Hex(text)}";
     }
 
     private static string CreateSignature(ClipContentKind kind, byte[] bytes)
     {
-        using var sha256 = SHA256.Create();
-        var hash = sha256.ComputeHash(bytes);
-        return $"{kind}:{BitConverter.ToString(hash).Replace("-", string.Empty)}";
+        return $"{kind}:{ContentHashing.ComputeSha256Hex(bytes)}";
     }
 }

@@ -17,7 +17,10 @@ internal static class AtomicFile
             FileShare.Read,
             bufferSize: 81920,
             useAsync: true);
-        using var buffer = new MemoryStream();
+        var initialCapacity = source.Length is > 0 and <= int.MaxValue
+            ? (int)source.Length
+            : 0;
+        using var buffer = new MemoryStream(initialCapacity);
         await source.CopyToAsync(buffer, 81920, cancellationToken).ConfigureAwait(false);
         return buffer.ToArray();
     }

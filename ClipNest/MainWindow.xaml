@@ -289,17 +289,18 @@
 
                                             <Grid
                                                 x:Name="ImageLayout"
-                                                Margin="6"
-                                                MaxHeight="208"
+                                                Margin="0"
                                                 ToolTip="双击查看大图"
-                                                Visibility="Collapsed">
+                                                Visibility="Collapsed"
+                                                infrastructure:RoundedClip.BottomRadius="8"
+                                                infrastructure:RoundedClip.TopRadius="8">
                                                 <Border
-                                                    Background="{DynamicResource MediaBackdropBrush}"
+                                                    Background="{DynamicResource CardSurfaceBrush}"
                                                     CornerRadius="8" />
                                                 <Border
                                                     CornerRadius="8">
                                                     <Image
-                                                        HorizontalAlignment="Center"
+                                                        HorizontalAlignment="Left"
                                                         VerticalAlignment="Center"
                                                         MaxWidth="{Binding PixelWidth}"
                                                         MaxHeight="{Binding PixelHeight}"
@@ -311,14 +312,13 @@
                                                 <Border
                                                     x:Name="ImageDimensionBadge"
                                                     Margin="0,0,0,0"
-                                                    Padding="6,2"
-                                                    HorizontalAlignment="Left"
+                                                    HorizontalAlignment="Right"
                                                     VerticalAlignment="Bottom"
-                                                    Background="{DynamicResource DimensionBadgeBrush}"
-                                                    CornerRadius="5"
                                                     IsHitTestVisible="False">
                                                     <Border.Style>
-                                                        <Style TargetType="{x:Type Border}">
+                                                        <Style
+                                                            BasedOn="{StaticResource ImageInfoBadgeStyle}"
+                                                            TargetType="{x:Type Border}">
                                                             <Setter Property="Opacity" Value="0" />
                                                             <Style.Triggers>
                                                                 <DataTrigger
@@ -330,8 +330,7 @@
                                                         </Style>
                                                     </Border.Style>
                                                     <TextBlock
-                                                        FontSize="11"
-                                                        Foreground="{DynamicResource ToastForegroundBrush}"
+                                                        Style="{StaticResource ImageInfoTextStyle}"
                                                         Text="{Binding ImageDimensionsLabel}" />
                                                 </Border>
                                             </Grid>
@@ -575,46 +574,64 @@
             </Grid>
         </Border>
 
-        <Grid
+        <Border
             x:Name="ImagePreviewOverlay"
             Panel.ZIndex="40"
             Margin="6"
             Background="{DynamicResource PreviewOverlayBrush}"
+            BorderBrush="{DynamicResource WindowEdgeBrush}"
+            BorderThickness="1"
+            CornerRadius="12"
             MouseLeftButtonDown="ImagePreviewOverlay_MouseLeftButtonDown"
+            SnapsToDevicePixels="True"
             Visibility="Collapsed">
-            <Image
-                x:Name="ImagePreviewLarge"
-                Margin="26,32,26,34"
-                RenderOptions.BitmapScalingMode="HighQuality"
-                Stretch="Uniform" />
-            <Border
-                Margin="0,0,0,10"
-                Padding="8,3"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Bottom"
-                Background="{DynamicResource PreviewBadgeBrush}"
-                CornerRadius="6"
-                IsHitTestVisible="False">
-                <TextBlock
-                    x:Name="ImagePreviewDimensions"
-                    FontSize="10.5"
-                    Foreground="{DynamicResource ToastForegroundBrush}" />
-            </Border>
-            <Button
-                Margin="0,8,8,0"
-                HorizontalAlignment="Right"
-                VerticalAlignment="Top"
-                AutomationProperties.Name="关闭图片预览"
-                Click="ImagePreviewCloseButton_Click"
-                Style="{StaticResource IconButtonStyle}"
-                ToolTip="关闭 (Esc)">
-                <Path
-                    Width="11"
-                    Height="11"
-                    Data="M2,2 L10,10 M10,2 L2,10"
-                    Style="{StaticResource IconPathStyle}" />
-            </Button>
-        </Grid>
+            <Grid
+                infrastructure:RoundedClip.BottomRadius="11"
+                infrastructure:RoundedClip.TopRadius="11">
+                <Canvas
+                    x:Name="ImagePreviewViewport"
+                    Margin="0"
+                    Background="Transparent"
+                    ClipToBounds="True"
+                    LostMouseCapture="ImagePreviewViewport_LostMouseCapture"
+                    PreviewMouseLeftButtonDown="ImagePreviewViewport_PreviewMouseLeftButtonDown"
+                    PreviewMouseLeftButtonUp="ImagePreviewViewport_PreviewMouseLeftButtonUp"
+                    PreviewMouseMove="ImagePreviewViewport_PreviewMouseMove">
+                    <Image
+                        x:Name="ImagePreviewLarge"
+                        RenderOptions.BitmapScalingMode="HighQuality"
+                        Stretch="Fill">
+                        <Image.RenderTransform>
+                            <MatrixTransform x:Name="ImagePreviewTransform" />
+                        </Image.RenderTransform>
+                    </Image>
+                </Canvas>
+                <Border
+                    Margin="0,0,0,10"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Bottom"
+                    IsHitTestVisible="False"
+                    Style="{StaticResource ImageInfoBadgeStyle}">
+                    <TextBlock
+                        x:Name="ImagePreviewDimensions"
+                        Style="{StaticResource ImageInfoTextStyle}" />
+                </Border>
+                <Button
+                    Margin="0,8,8,0"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Top"
+                    AutomationProperties.Name="关闭图片预览"
+                    Click="ImagePreviewCloseButton_Click"
+                    Style="{StaticResource IconButtonStyle}"
+                    ToolTip="关闭 (Esc)">
+                    <Path
+                        Width="11"
+                        Height="11"
+                        Data="M2,2 L10,10 M10,2 L2,10"
+                        Style="{StaticResource IconPathStyle}" />
+                </Button>
+            </Grid>
+        </Border>
 
         <Thumb
             x:Name="ResizeGrip"

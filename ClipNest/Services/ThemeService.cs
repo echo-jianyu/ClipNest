@@ -32,6 +32,7 @@ public sealed class ThemeService : IDisposable
     private HwndSourceHook? _windowHook;
     private AppThemeMode _mode = AppThemeMode.FollowSystem;
     private ThemeVariant _activeVariant = ThemeVariant.Light;
+    private bool _hasAppliedTheme;
     private bool _disposed;
 
     public ThemeService(Dispatcher dispatcher)
@@ -60,7 +61,7 @@ public sealed class ThemeService : IDisposable
         }
 
         _mode = mode;
-        ApplyVariant(ResolveVariant(mode), force: true);
+        ApplyVariant(ResolveVariant(mode), force: !_hasAppliedTheme);
     }
 
     public void AttachToWindow(Window window)
@@ -169,6 +170,7 @@ public sealed class ThemeService : IDisposable
         };
         ReplaceVariantDictionary(application.Resources, variantDictionary);
         _activeVariant = variant;
+        _hasAppliedTheme = true;
         ThemeChanged?.Invoke(this, EventArgs.Empty);
     }
 

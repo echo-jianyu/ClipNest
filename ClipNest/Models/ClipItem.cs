@@ -490,57 +490,7 @@ public sealed class ClipItem : ObservableObject
 
     internal static BitmapImage? DecodeThumbnail(byte[]? bytes)
     {
-        if (bytes is null || bytes.Length == 0)
-        {
-            return null;
-        }
-
-        try
-        {
-            using var stream = new MemoryStream(bytes, writable: false);
-            var frame = BitmapFrame.Create(
-                stream,
-                BitmapCreateOptions.PreservePixelFormat,
-                BitmapCacheOption.OnLoad);
-            var longestSide = Math.Max(frame.PixelWidth, frame.PixelHeight);
-
-            if (stream.CanSeek)
-            {
-                stream.Position = 0;
-            }
-
-            var bitmap = new BitmapImage();
-            bitmap.BeginInit();
-            bitmap.CacheOption = BitmapCacheOption.OnLoad;
-            if (longestSide > 1280)
-            {
-                if (frame.PixelWidth >= frame.PixelHeight)
-                {
-                    bitmap.DecodePixelWidth = 1280;
-                }
-                else
-                {
-                    bitmap.DecodePixelHeight = 1280;
-                }
-            }
-
-            bitmap.StreamSource = stream;
-            bitmap.EndInit();
-            bitmap.Freeze();
-            return bitmap;
-        }
-        catch (FormatException)
-        {
-            return null;
-        }
-        catch (NotSupportedException)
-        {
-            return null;
-        }
-        catch (ArgumentException)
-        {
-            return null;
-        }
+        return ImageCodec.TryDecode(bytes, maxLongEdge: 1280);
     }
 
     private void ResetImagePreview()
@@ -562,36 +512,39 @@ public sealed class ClipItem : ObservableObject
             return;
         }
 
-        var bytes = GetImageBytes();
-        if (bytes is null || bytes.Length == 0)
+        (int Width, int Height)? dimensions = null;
+        if (_imagePngBase64 is not null)
         {
-            PixelWidth = Math.Max(1, PixelWidth);
-            PixelHeight = Math.Max(1, PixelHeight);
-            return;
-        }
-
-        try
-        {
-            using var stream = new MemoryStream(bytes, writable: false);
-            var frame = BitmapFrame.Create(
-                stream,
-                BitmapCreateOptions.DelayCreation,
-                BitmapCacheOption.None);
-            if (frame.PixelWidth > 0 && frame.PixelHeight > 0)
+            try
             {
-                PixelWidth = frame.PixelWidth;
-                PixelHeight = frame.PixelHeight;
-                return;
+                using var stream = new MemoryStream(
+                    Convert.FromBase64String(_imagePngBase64),
+                    writable: false);
+                dimensions = ImageCodec.TryReadDimensions(stream);
+            }
+            catch (FormatException)
+            {
             }
         }
-        catch (FormatException)
+        else if (_imageFilePath is not null && File.Exists(_imageFilePath))
         {
+            try
+            {
+                using var stream = File.OpenRead(_imageFilePath);
+                dimensions = ImageCodec.TryReadDimensions(stream);
+            }
+            catch (Exception exception) when (
+                exception is IOException
+                or UnauthorizedAccessException)
+            {
+            }
         }
-        catch (NotSupportedException)
+
+        if (dimensions is var (width, height))
         {
-        }
-        catch (ArgumentException)
-        {
+            PixelWidth = width;
+            PixelHeight = height;
+            return;
         }
 
         PixelWidth = Math.Max(1, PixelWidth);

@@ -27,6 +27,28 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
+    public void ClearHistory_RemovesItemsAndUpdatesVisibleState()
+    {
+        using var clipboard = new FakeClipboardService();
+        using var viewModel = new MainViewModel(clipboard, []);
+        var notifications = new List<(string Message, bool CanUndo)>();
+        viewModel.NotificationRequested += (message, canUndo) =>
+            notifications.Add((message, canUndo));
+        clipboard.Emit(ClipContent.FromText("first"));
+        clipboard.Emit(ClipContent.FromText("second"));
+
+        viewModel.ClearHistory();
+
+        Assert.Empty(viewModel.Items);
+        Assert.Empty(viewModel.VisibleItems);
+        Assert.False(viewModel.HasItems);
+        Assert.False(viewModel.HasVisibleItems);
+        Assert.Equal(
+            (Message: "历史记录已清空", CanUndo: false),
+            Assert.Single(notifications));
+    }
+
+    [Fact]
     public void RejectedOversizedClipboardText_ShowsNotificationWithoutAddingHistory()
     {
         using var clipboard = new FakeClipboardService();
