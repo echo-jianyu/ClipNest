@@ -27,6 +27,7 @@ public partial class MainWindow : Window, IDisposable
     private readonly HistoryStore _historyStore;
     private readonly SettingsStore _settingsStore;
     private readonly AutoStartService _autoStartService;
+    private readonly ThemeService _themeService;
     private readonly AppSettings _settings;
     private readonly DispatcherTimer _historySaveTimer;
     private readonly DispatcherTimer _placementSaveTimer;
@@ -50,6 +51,8 @@ public partial class MainWindow : Window, IDisposable
     private bool _suppressCardClick;
     private bool _selectionRefreshQueued;
     private HwndSource? _windowSource;
+    private SettingsWindow? _settingsWindow;
+    private bool _toastCanUndo;
 
     public MainWindow(
         MainViewModel viewModel,
@@ -57,6 +60,7 @@ public partial class MainWindow : Window, IDisposable
         HistoryStore historyStore,
         SettingsStore settingsStore,
         AutoStartService autoStartService,
+        ThemeService themeService,
         AppSettings settings)
     {
         _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
@@ -64,6 +68,7 @@ public partial class MainWindow : Window, IDisposable
         _historyStore = historyStore ?? throw new ArgumentNullException(nameof(historyStore));
         _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
         _autoStartService = autoStartService ?? throw new ArgumentNullException(nameof(autoStartService));
+        _themeService = themeService ?? throw new ArgumentNullException(nameof(themeService));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _hotKey = HotKeyDefinition.FromSettings(_settings);
         _hotKeyService = new HotKeyService();
@@ -72,6 +77,7 @@ public partial class MainWindow : Window, IDisposable
         DataContext = _viewModel;
         _viewModel.ApplyDisplaySettings(_settings.CardFontSize);
         ApplySettings();
+        ApplyTitleBarVisibility();
 
         _viewModel.HistoryChanged += ViewModel_HistoryChanged;
         _viewModel.NotificationRequested += ViewModel_NotificationRequested;
@@ -108,6 +114,7 @@ public partial class MainWindow : Window, IDisposable
         SourceInitialized += MainWindow_SourceInitialized;
         LocationChanged += MainWindow_PlacementChanged;
         SizeChanged += MainWindow_SizeChanged;
+        DpiChanged += MainWindow_DpiChanged;
         Closing += MainWindow_Closing;
         Closed += MainWindow_Closed;
     }
@@ -117,6 +124,8 @@ public partial class MainWindow : Window, IDisposable
     public string HotKeyDisplayText => _hotKeyService.CurrentHotKey.DisplayText;
 
     public event EventHandler? HotKeyChanged;
+
+    public event Action<string>? BackgroundNotificationRequested;
 
     public void HideToTray()
     {
@@ -150,6 +159,7 @@ public partial class MainWindow : Window, IDisposable
 
     public void ShowFromTray(bool activate = true)
     {
+        _themeService.RefreshSystemTheme();
         if (IsVisible)
         {
             if (activate)
@@ -196,20 +206,42 @@ public partial class MainWindow : Window, IDisposable
         _cardCopyTimer.Stop();
         _placementSaveTimer.Stop();
 
-        var result = await _historyStore.SaveAsync(_viewModel.Items.ToList());
+        var result = await SaveHistoryAsync();
         _viewModel.ApplyExternalizedImages(result);
         await SavePlacementAsync();
+    }
+
+    public void FlushForShutdown()
+    {
+        _historySaveTimer.Stop();
+        _placementSaveTimer.Stop();
+        _settings.Width = Width;
+        _settings.Height = Height;
+        _settings.Left = Left;
+        _settings.Top = Top;
+
+        var result = SaveHistoryAsync().GetAwaiter().GetResult();
+        _viewModel.ApplyExternalizedImages(result);
+        _settingsStore.SaveAsync(_settings).GetAwaiter().GetResult();
     }
 
     private void ApplySettings()
     {
         _settings.Normalize();
-        Width = _settings.Width;
-        Height = _settings.Height;
         MinWidth = AppSettings.MinimumWidth;
         MinHeight = AppSettings.MinimumHeight;
         MaxWidth = AppSettings.MaximumWidth;
         MaxHeight = AppSettings.MaximumHeight;
+
+        var workArea = SystemParameters.WorkArea;
+        MaxWidth = Math.Max(
+            AppSettings.MinimumWidth,
+            Math.Min(MaxWidth, workArea.Width - 12));
+        MaxHeight = Math.Max(
+            AppSettings.MinimumHeight,
+            Math.Min(MaxHeight, workArea.Height - 12));
+        Width = Math.Min(_settings.Width, MaxWidth);
+        Height = Math.Min(_settings.Height, MaxHeight);
 
         var virtualScreen = new Rect(
             SystemParameters.VirtualScreenLeft,
@@ -243,9 +275,19 @@ public partial class MainWindow : Window, IDisposable
             }
         }
 
-        var workArea = SystemParameters.WorkArea;
         Left = Math.Max(workArea.Left + 18, workArea.Right - Width - 22);
         Top = workArea.Top + 22;
+    }
+
+    private void ApplyTitleBarVisibility()
+    {
+        var showTitleBar = !_settings.HideTitleBar;
+        TitleBarRow.Height = showTitleBar
+            ? new GridLength(35)
+            : new GridLength(0);
+        DragSurface.Visibility = showTitleBar
+            ? Visibility.Visible
+            : Visibility.Collapsed;
     }
 
     private void MainWindow_SourceInitialized(object? sender, EventArgs eventArgs)
@@ -253,6 +295,8 @@ public partial class MainWindow : Window, IDisposable
         var handle = new WindowInteropHelper(this).Handle;
         _windowSource = HwndSource.FromHwnd(handle);
         _windowSource?.AddHook(WindowMessageHook);
+        _themeService.AttachToWindow(this);
+        UpdateTextRenderingMode();
         var extendedStyle = NativeMethods.GetWindowLongPtr(handle, NativeMethods.GwlExStyle).ToInt64();
         extendedStyle |= NativeMethods.WsExToolWindow;
         extendedStyle &= ~NativeMethods.WsExAppWindow;
@@ -308,9 +352,14 @@ public partial class MainWindow : Window, IDisposable
         }
 
         var value = lParam.ToInt64();
-        var screenPoint = new Point(
-            unchecked((short)(value & 0xFFFF)),
-            unchecked((short)((value >> 16) & 0xFFFF)));
+        var mouseMessage = (int)((value >> 16) & 0xFFFF);
+        if (mouseMessage != 0x0201
+            || !NativeMethods.GetCursorPos(out var cursorPosition))
+        {
+            return IntPtr.Zero;
+        }
+
+        var screenPoint = new Point(cursorPosition.X, cursorPosition.Y);
         var historyPoint = HistoryScrollViewer.PointFromScreen(screenPoint);
         if (historyPoint.X >= 0
             && historyPoint.Y >= 0
@@ -332,7 +381,7 @@ public partial class MainWindow : Window, IDisposable
 
     private void ViewModel_NotificationRequested(string message, bool canUndo)
     {
-        Dispatcher.BeginInvoke(new Action(() => ShowToast(message, canUndo)));
+        Dispatcher.BeginInvoke(new Action(() => NotifyUser(message, canUndo)));
     }
 
     private void ViewModel_ItemCopied(object? sender, EventArgs eventArgs)
@@ -393,7 +442,7 @@ public partial class MainWindow : Window, IDisposable
         _historySaveTimer.Stop();
         try
         {
-            var result = await _historyStore.SaveAsync(_viewModel.Items.ToList());
+            var result = await SaveHistoryAsync();
             _viewModel.ApplyExternalizedImages(result);
         }
         catch (Exception exception) when (
@@ -405,7 +454,7 @@ public partial class MainWindow : Window, IDisposable
             if (!_historySaveWarningShown)
             {
                 _historySaveWarningShown = true;
-                ShowToast("历史记录自动保存失败", false);
+                NotifyUser("历史记录自动保存失败", false);
             }
         }
     }
@@ -439,9 +488,18 @@ public partial class MainWindow : Window, IDisposable
             if (!_historySaveWarningShown)
             {
                 _historySaveWarningShown = true;
-                ShowToast("窗口位置保存失败", false);
+                NotifyUser("窗口位置保存失败", false);
             }
         }
+    }
+
+    private Task<HistorySaveResult> SaveHistoryAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return _historyStore.SaveAsync(
+            _viewModel.Items.ToList(),
+            _viewModel.GetProtectedImageFileNames(),
+            cancellationToken);
     }
 
     private void MainWindow_PlacementChanged(object? sender, EventArgs eventArgs)
@@ -663,8 +721,42 @@ public partial class MainWindow : Window, IDisposable
 
     private Point GetCursorScreenPositionInDips()
     {
-        var screenPoint = PointToScreen(Mouse.GetPosition(this));
-        return GetDeviceToDipTransform().Transform(screenPoint);
+        if (!NativeMethods.GetCursorPos(out var cursorPosition))
+        {
+            var screenPoint = PointToScreen(Mouse.GetPosition(this));
+            return GetDeviceToDipTransform().Transform(screenPoint);
+        }
+
+        var dpiScale = VisualTreeHelper.GetDpi(this).PixelsPerInchX / 96d;
+        if (dpiScale <= 0)
+        {
+            dpiScale = 1;
+        }
+
+        return new Point(cursorPosition.X / dpiScale, cursorPosition.Y / dpiScale);
+    }
+
+    private void MainWindow_DpiChanged(object sender, DpiChangedEventArgs eventArgs)
+    {
+        UpdateTextRenderingMode();
+        if (!_isResizing)
+        {
+            return;
+        }
+
+        _resizeStartWidth = Width;
+        _resizeStartHeight = Height;
+        _resizeStartCursor = GetCursorScreenPositionInDips();
+    }
+
+    private void UpdateTextRenderingMode()
+    {
+        var dpi = VisualTreeHelper.GetDpi(this);
+        TextOptions.SetTextFormattingMode(
+            this,
+            dpi.PixelsPerInchX > 96.5
+                ? TextFormattingMode.Ideal
+                : TextFormattingMode.Display);
     }
 
     private void ClampWindowToCurrentMonitor()
@@ -675,6 +767,14 @@ public partial class MainWindow : Window, IDisposable
         }
 
         var workArea = GetCurrentMonitorWorkArea();
+        MaxWidth = Math.Max(
+            AppSettings.MinimumWidth,
+            Math.Min(AppSettings.MaximumWidth, workArea.Width - 12));
+        MaxHeight = Math.Max(
+            AppSettings.MinimumHeight,
+            Math.Min(AppSettings.MaximumHeight, workArea.Height - 12));
+        Width = Math.Min(Width, MaxWidth);
+        Height = Math.Min(Height, MaxHeight);
         Left = Math.Min(
             Math.Max(Left, workArea.Left),
             Math.Max(workArea.Left, workArea.Right - Width));
@@ -842,7 +942,7 @@ public partial class MainWindow : Window, IDisposable
 
     internal static bool ShouldDelayCardCopy(ClipItem item)
     {
-        return item.IsImage;
+        return false;
     }
 
     private void CopyCardImmediately(ClipItem item)
@@ -955,18 +1055,37 @@ public partial class MainWindow : Window, IDisposable
 
     public void ShowSettings()
     {
+        if (_settingsWindow is not null)
+        {
+            if (_settingsWindow.IsVisible)
+            {
+                _settingsWindow.Activate();
+            }
+
+            return;
+        }
+
+        var previousThemeMode = _settings.ThemeMode;
         var dialog = new SettingsWindow(
             _settings.CardFontSize,
             _hotKeyService.CurrentHotKey,
             _settings.HideAfterCopy,
-            _settings.AutoStartOnLogin);
+            _settings.AutoStartOnLogin,
+            _settings.ThemeMode,
+            _settings.HideTitleBar);
+        dialog.ThemePreviewRequested += _themeService.ApplyTheme;
+        _settingsWindow = dialog;
         if (IsVisible)
         {
             dialog.Owner = this;
+            WindowPlacement.ConstrainToWindowScreen(
+                dialog,
+                this,
+                maximumHeightRatio: 0.85);
         }
         else
         {
-            dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            WindowPlacement.CenterOnCursor(dialog, maximumHeightRatio: 0.85);
         }
 
         _hotKeyService.Suspend();
@@ -977,8 +1096,11 @@ public partial class MainWindow : Window, IDisposable
         }
         finally
         {
+            dialog.ThemePreviewRequested -= _themeService.ApplyTheme;
+            _settingsWindow = null;
             if (!accepted)
             {
+                _themeService.ApplyTheme(previousThemeMode);
                 _hotKeyAvailable = _hotKeyService.Resume();
                 UpdateHotKeyUi();
             }
@@ -1008,6 +1130,10 @@ public partial class MainWindow : Window, IDisposable
 
         _settings.CardFontSize = dialog.CardFontSize;
         _settings.HideAfterCopy = dialog.HideAfterCopy;
+        _settings.HideTitleBar = dialog.HideTitleBar;
+        _settings.ThemeMode = dialog.ThemeMode;
+        _themeService.ApplyTheme(_settings.ThemeMode);
+        ApplyTitleBarVisibility();
         _viewModel.ApplyDisplaySettings(_settings.CardFontSize);
         _ = SaveSettingsAsync();
         UpdateHotKeyUi();
@@ -1030,7 +1156,7 @@ public partial class MainWindow : Window, IDisposable
 
         if (notices.Count > 0)
         {
-            ShowToast(string.Join(" ", notices), false);
+            NotifyUser(string.Join(" ", notices), false);
         }
     }
 
@@ -1054,13 +1180,14 @@ public partial class MainWindow : Window, IDisposable
             exception is IOException
             or UnauthorizedAccessException)
         {
-            ShowToast("设置保存失败", false);
+            NotifyUser("设置保存失败", false);
         }
     }
 
     private void Window_PreviewTextInput(object sender, TextCompositionEventArgs eventArgs)
     {
-        if (_viewModel.IsEditing
+        if (ImagePreviewOverlay.Visibility == Visibility.Visible
+            || _viewModel.IsEditing
             || _viewModel.IsEditingImage
             || Keyboard.FocusedElement is TextBoxBase
             || string.IsNullOrEmpty(eventArgs.Text))
@@ -1231,6 +1358,7 @@ public partial class MainWindow : Window, IDisposable
 
     private void UndoToastButton_Click(object sender, RoutedEventArgs eventArgs)
     {
+        _toastCanUndo = false;
         _viewModel.UndoDeleteCommand.Execute(null);
         HideToast();
     }
@@ -1258,6 +1386,17 @@ public partial class MainWindow : Window, IDisposable
             else
             {
                 HideToTray();
+            }
+
+            eventArgs.Handled = true;
+            return;
+        }
+
+        if (ImagePreviewOverlay.Visibility == Visibility.Visible)
+        {
+            if (eventArgs.Key == Key.Space)
+            {
+                CloseImagePreview();
             }
 
             eventArgs.Handled = true;
@@ -1363,24 +1502,58 @@ public partial class MainWindow : Window, IDisposable
         }
 
         if (Keyboard.Modifiers == ModifierKeys.None
-            && eventArgs.Key is >= Key.D1 and <= Key.D5)
+            && TryGetHistoryShortcutIndex(eventArgs.Key, out var shortcutIndex)
+            && shortcutIndex < _viewModel.VisibleItems.Count)
         {
-            var index = (int)eventArgs.Key - (int)Key.D1;
-            if (index < _viewModel.VisibleItems.Count)
-            {
-                var item = _viewModel.VisibleItems[index];
-                SelectItem(item);
-                _viewModel.CopyFormattedCommand.Execute(item);
-                eventArgs.Handled = true;
-            }
+            var item = _viewModel.VisibleItems[shortcutIndex];
+            SelectItem(item);
+            _viewModel.CopyFormattedCommand.Execute(item);
+            eventArgs.Handled = true;
+        }
+    }
+
+    internal static bool TryGetHistoryShortcutIndex(Key key, out int index)
+    {
+        switch (key)
+        {
+            case Key.D1:
+            case Key.NumPad1:
+                index = 0;
+                return true;
+            case Key.D2:
+            case Key.NumPad2:
+                index = 1;
+                return true;
+            case Key.D3:
+            case Key.NumPad3:
+                index = 2;
+                return true;
+            case Key.D4:
+            case Key.NumPad4:
+                index = 3;
+                return true;
+            case Key.D5:
+            case Key.NumPad5:
+                index = 4;
+                return true;
+            default:
+                index = -1;
+                return false;
         }
     }
 
     private void ShowToast(string message, bool canUndo)
     {
+        if (_toastCanUndo && !canUndo)
+        {
+            _toastCanUndo = false;
+            _viewModel.DiscardUndo();
+        }
+
         _toastTimer.Stop();
         ToastMessage.Text = message;
         UndoToastButton.Visibility = canUndo ? Visibility.Visible : Visibility.Collapsed;
+        _toastCanUndo = canUndo;
         ToastHost.Visibility = Visibility.Visible;
         ToastHost.BeginAnimation(
             OpacityProperty,
@@ -1400,6 +1573,12 @@ public partial class MainWindow : Window, IDisposable
     private void HideToastImmediately()
     {
         _toastTimer.Stop();
+        if (_toastCanUndo)
+        {
+            _toastCanUndo = false;
+            _viewModel.DiscardUndo();
+        }
+
         ToastHost.BeginAnimation(OpacityProperty, null);
         ToastHost.Opacity = 0;
         ToastHost.Visibility = Visibility.Collapsed;
@@ -1407,7 +1586,29 @@ public partial class MainWindow : Window, IDisposable
 
     private void ToastTimer_Tick(object? sender, EventArgs eventArgs)
     {
+        if (_toastCanUndo)
+        {
+            _toastCanUndo = false;
+            _viewModel.DiscardUndo();
+        }
+
         HideToast();
+    }
+
+    private void NotifyUser(string message, bool canUndo)
+    {
+        if (IsVisible)
+        {
+            ShowToast(message, canUndo);
+            return;
+        }
+
+        if (canUndo)
+        {
+            _viewModel.DiscardUndo();
+        }
+
+        BackgroundNotificationRequested?.Invoke(message);
     }
 
     private static bool IsInteractiveElement(DependencyObject? source)

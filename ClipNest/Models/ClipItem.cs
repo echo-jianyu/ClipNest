@@ -277,6 +277,7 @@ public sealed class ClipItem : ObservableObject
             }
         }
 
+        item.EnsureImageDimensions();
         item.NormalizeAfterLoad();
         return item;
     }
@@ -502,9 +503,6 @@ public sealed class ClipItem : ObservableObject
                 BitmapCreateOptions.PreservePixelFormat,
                 BitmapCacheOption.OnLoad);
             var longestSide = Math.Max(frame.PixelWidth, frame.PixelHeight);
-            var decodeWidth = longestSide > 640
-                ? Math.Max(1, (int)Math.Round(frame.PixelWidth * (640d / longestSide)))
-                : 0;
 
             if (stream.CanSeek)
             {
@@ -514,9 +512,16 @@ public sealed class ClipItem : ObservableObject
             var bitmap = new BitmapImage();
             bitmap.BeginInit();
             bitmap.CacheOption = BitmapCacheOption.OnLoad;
-            if (decodeWidth > 0)
+            if (longestSide > 1280)
             {
-                bitmap.DecodePixelWidth = decodeWidth;
+                if (frame.PixelWidth >= frame.PixelHeight)
+                {
+                    bitmap.DecodePixelWidth = 1280;
+                }
+                else
+                {
+                    bitmap.DecodePixelHeight = 1280;
+                }
             }
 
             bitmap.StreamSource = stream;
@@ -547,6 +552,50 @@ public sealed class ClipItem : ObservableObject
         {
             _imagePreviewVersion++;
         }
+    }
+
+    private void EnsureImageDimensions()
+    {
+        if (Kind != ClipContentKind.Image
+            || (PixelWidth > 0 && PixelHeight > 0))
+        {
+            return;
+        }
+
+        var bytes = GetImageBytes();
+        if (bytes is null || bytes.Length == 0)
+        {
+            PixelWidth = Math.Max(1, PixelWidth);
+            PixelHeight = Math.Max(1, PixelHeight);
+            return;
+        }
+
+        try
+        {
+            using var stream = new MemoryStream(bytes, writable: false);
+            var frame = BitmapFrame.Create(
+                stream,
+                BitmapCreateOptions.DelayCreation,
+                BitmapCacheOption.None);
+            if (frame.PixelWidth > 0 && frame.PixelHeight > 0)
+            {
+                PixelWidth = frame.PixelWidth;
+                PixelHeight = frame.PixelHeight;
+                return;
+            }
+        }
+        catch (FormatException)
+        {
+        }
+        catch (NotSupportedException)
+        {
+        }
+        catch (ArgumentException)
+        {
+        }
+
+        PixelWidth = Math.Max(1, PixelWidth);
+        PixelHeight = Math.Max(1, PixelHeight);
     }
 
     private static long NextSequence()

@@ -11,17 +11,19 @@
     PreviewKeyDown="Window_PreviewKeyDown"
     ResizeMode="NoResize"
     ShowInTaskbar="False"
+    SnapsToDevicePixels="True"
     Topmost="True"
+    UseLayoutRounding="True"
     WindowStartupLocation="CenterOwner"
     WindowStyle="None">
 
     <Border
         Margin="10"
-        Background="{StaticResource PanelBrush}"
-        BorderBrush="{StaticResource LineBrush}"
+        Background="{DynamicResource PanelBrush}"
+        BorderBrush="{DynamicResource LineBrush}"
         BorderThickness="1"
         CornerRadius="12"
-        Effect="{StaticResource WindowShadow}">
+        Effect="{DynamicResource WindowShadow}">
         <Grid Margin="20,18,20,17">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
@@ -39,7 +41,7 @@
                     Width="38"
                     Height="38"
                     VerticalAlignment="Top"
-                    Background="{StaticResource AccentSoftBrush}"
+                    Background="{DynamicResource AccentSoftBrush}"
                     CornerRadius="10">
                     <Path
                         Width="17"
@@ -47,7 +49,7 @@
                         Data="M7,3 L7,10 M7,13 L7.1,13 M3,1 L13,1 L13,15 L3,15 Z"
                         Fill="Transparent"
                         Stretch="Uniform"
-                        Stroke="{StaticResource AccentBrush}"
+                        Stroke="{DynamicResource AccentBrush}"
                         StrokeEndLineCap="Round"
                         StrokeLineJoin="Round"
                         StrokeStartLineCap="Round"
@@ -61,7 +63,7 @@
                         x:Name="TitleText"
                         FontSize="15.5"
                         FontWeight="SemiBold"
-                        Foreground="{StaticResource InkBrush}"
+                        Foreground="{DynamicResource InkBrush}"
                         Text="清空历史" />
                 </StackPanel>
             </Grid>
@@ -70,14 +72,14 @@
                 Grid.Row="1"
                 Margin="0,13,0,12"
                 Padding="11,8"
-                Background="#FFF7F8F6"
-                BorderBrush="{StaticResource LineBrush}"
+                Background="{DynamicResource SubtleSurfaceBrush}"
+                BorderBrush="{DynamicResource LineBrush}"
                 BorderThickness="1"
                 CornerRadius="7">
                 <TextBlock
                     x:Name="DetailText"
                     FontSize="11.5"
-                    Foreground="{StaticResource MutedBrush}"
+                    Foreground="{DynamicResource MutedBrush}"
                     Text="此操作无法撤销。"
                     TextWrapping="Wrap" />
             </Border>
@@ -98,7 +100,7 @@
                     MinWidth="88"
                     Margin="7,0,0,0"
                     Padding="13,6"
-                    Background="{StaticResource AccentBrush}"
+                    Background="{DynamicResource DangerActionBrush}"
                     Click="ConfirmButton_Click"
                     Content="清空历史"
                     IsDefault="True"

@@ -24,15 +24,17 @@ public sealed class AutoStartServiceTests
         try
         {
             Assert.True(service.TrySetEnabled(true, out var enableError), enableError);
+            Assert.True(service.IsEnabled());
             using (var key = Registry.CurrentUser.OpenSubKey(registryPath))
             {
                 Assert.NotNull(key);
                 Assert.Equal(
-                    $"\"{Path.GetFullPath(executablePath)}\"",
+                    $"\"{Path.GetFullPath(executablePath)}\" --tray",
                     key.GetValue("ClipNest"));
             }
 
             Assert.True(service.TrySetEnabled(false, out var disableError), disableError);
+            Assert.False(service.IsEnabled());
             using (var key = Registry.CurrentUser.OpenSubKey(registryPath))
             {
                 Assert.NotNull(key);

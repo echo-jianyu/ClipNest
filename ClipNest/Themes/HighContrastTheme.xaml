@@ -1,0 +1,145 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <SolidColorBrush
+        x:Key="InkBrush"
+        Color="{DynamicResource {x:Static SystemColors.WindowTextColorKey}}" />
+    <SolidColorBrush
+        x:Key="MutedBrush"
+        Color="{DynamicResource {x:Static SystemColors.GrayTextColorKey}}" />
+    <SolidColorBrush
+        x:Key="LineBrush"
+        Color="{DynamicResource {x:Static SystemColors.ActiveBorderColorKey}}" />
+    <SolidColorBrush
+        x:Key="WindowEdgeBrush"
+        Color="{DynamicResource {x:Static SystemColors.ActiveBorderColorKey}}" />
+    <SolidColorBrush
+        x:Key="CanvasBrush"
+        Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" />
+    <SolidColorBrush
+        x:Key="PanelBrush"
+        Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" />
+    <SolidColorBrush
+        x:Key="HistorySurfaceBrush"
+        Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" />
+    <SolidColorBrush
+        x:Key="ChromeBrush"
+        Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" />
+    <SolidColorBrush
+        x:Key="AccentBrush"
+        Color="{DynamicResource {x:Static SystemColors.HotTrackColorKey}}" />
+    <SolidColorBrush
+        x:Key="AccentSoftBrush"
+        Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" />
+    <SolidColorBrush
+        x:Key="SeaBrush"
+        Color="{DynamicResource {x:Static SystemColors.HotTrackColorKey}}" />
+    <SolidColorBrush
+        x:Key="SeaSoftBrush"
+        Color="{DynamicResource {x:Static SystemColors.HighlightColorKey}}" />
+    <SolidColorBrush
+        x:Key="PrimaryActionBrush"
+        Color="{DynamicResource {x:Static SystemColors.HighlightColorKey}}" />
+    <SolidColorBrush
+        x:Key="PrimaryActionForegroundBrush"
+        Color="{DynamicResource {x:Static SystemColors.HighlightTextColorKey}}" />
+    <SolidColorBrush
+        x:Key="DangerActionBrush"
+        Color="{DynamicResource {x:Static SystemColors.HighlightColorKey}}" />
+    <SolidColorBrush
+        x:Key="DangerActionForegroundBrush"
+        Color="{DynamicResource {x:Static SystemColors.HighlightTextColorKey}}" />
+    <SolidColorBrush
+        x:Key="SubtleSurfaceBrush"
+        Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" />
+    <SolidColorBrush
+        x:Key="ToolTipSurfaceBrush"
+        Color="{DynamicResource {x:Static SystemColors.InfoColorKey}}" />
+    <SolidColorBrush
+        x:Key="ToolTipBorderBrush"
+        Color="{DynamicResource {x:Static SystemColors.InfoTextColorKey}}" />
+    <SolidColorBrush
+        x:Key="QuietButtonBrush"
+        Color="{DynamicResource {x:Static SystemColors.ControlColorKey}}" />
+    <SolidColorBrush
+        x:Key="SwitchTrackOffBrush"
+        Color="{DynamicResource {x:Static SystemColors.ControlColorKey}}" />
+    <SolidColorBrush
+        x:Key="SwitchTrackOffBorderBrush"
+        Color="{DynamicResource {x:Static SystemColors.ControlDarkColorKey}}" />
+    <SolidColorBrush
+        x:Key="SwitchThumbBrush"
+        Color="{DynamicResource {x:Static SystemColors.HighlightTextColorKey}}" />
+    <SolidColorBrush
+        x:Key="HoverSurfaceBrush"
+        Color="{DynamicResource {x:Static SystemColors.HighlightColorKey}}" />
+    <SolidColorBrush
+        x:Key="ScrollThumbBrush"
+        Color="{DynamicResource {x:Static SystemColors.ControlDarkColorKey}}" />
+    <SolidColorBrush
+        x:Key="InputSurfaceBrush"
+        Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" />
+    <SolidColorBrush
+        x:Key="CardSurfaceBrush"
+        Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" />
+    <SolidColorBrush
+        x:Key="CardBorderBrush"
+        Color="{DynamicResource {x:Static SystemColors.ControlDarkColorKey}}" />
+    <SolidColorBrush
+        x:Key="CardPinnedBorderBrush"
+        Color="{DynamicResource {x:Static SystemColors.HotTrackColorKey}}" />
+    <SolidColorBrush
+        x:Key="CardHoverBorderBrush"
+        Color="{DynamicResource {x:Static SystemColors.HotTrackColorKey}}" />
+    <SolidColorBrush
+        x:Key="CardSelectedSurfaceBrush"
+        Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" />
+    <SolidColorBrush
+        x:Key="MediaBackdropBrush"
+        Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" />
+    <SolidColorBrush
+        x:Key="FloatingToolbarBrush"
+        Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" />
+    <SolidColorBrush
+        x:Key="FloatingToolbarBorderBrush"
+        Color="{DynamicResource {x:Static SystemColors.WindowTextColorKey}}" />
+    <SolidColorBrush
+        x:Key="FloatingToolbarDividerBrush"
+        Color="{DynamicResource {x:Static SystemColors.WindowTextColorKey}}" />
+    <SolidColorBrush
+        x:Key="ToastSurfaceBrush"
+        Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" />
+    <SolidColorBrush
+        x:Key="ToastForegroundBrush"
+        Color="{DynamicResource {x:Static SystemColors.WindowTextColorKey}}" />
+    <SolidColorBrush
+        x:Key="ToastHoverBrush"
+        Color="{DynamicResource {x:Static SystemColors.HighlightColorKey}}" />
+    <SolidColorBrush
+        x:Key="PreviewOverlayBrush"
+        Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" />
+    <SolidColorBrush
+        x:Key="PreviewBadgeBrush"
+        Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" />
+    <SolidColorBrush
+        x:Key="DimensionBadgeBrush"
+        Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" />
+    <SolidColorBrush
+        x:Key="ResizeGripBrush"
+        Color="{DynamicResource {x:Static SystemColors.WindowTextColorKey}}" />
+    <SolidColorBrush
+        x:Key="OverlayButtonBrush"
+        Color="{DynamicResource {x:Static SystemColors.WindowColorKey}}" />
+    <SolidColorBrush
+        x:Key="OverlayButtonHoverBrush"
+        Color="{DynamicResource {x:Static SystemColors.HighlightColorKey}}" />
+
+    <DropShadowEffect
+        x:Key="WindowShadow"
+        BlurRadius="0"
+        Color="#FF000000"
+        Direction="270"
+        Opacity="0"
+        ShadowDepth="0" />
+</ResourceDictionary>

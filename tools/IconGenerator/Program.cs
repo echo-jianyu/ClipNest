@@ -44,109 +44,66 @@ static RenderTargetBitmap Render(int size)
     using (var context = visual.RenderOpen())
     {
         var scale = size / 256d;
+        var clipboardStrokeWidth = size <= 20 ? 18d : size <= 32 ? 15d : 12d;
+        var clipStrokeWidth = size <= 20 ? 14d : size <= 32 ? 12d : 10d;
+        var contentLineHeight = size <= 20 ? 12d : size <= 32 ? 16d : 12d;
+        var contentLineGap = size <= 20 ? 16d : size <= 32 ? 14d : 16d;
+        var firstLineWidth = size <= 20 ? 64d : size <= 32 ? 62d : 53d;
+        var secondLineWidth = size <= 20 ? 110d : size <= 32 ? 114d : 108d;
+        var thirdLineWidth = size <= 20 ? 82d : size <= 32 ? 80d : 74d;
         context.PushTransform(new ScaleTransform(scale, scale));
+        context.PushTransform(new ScaleTransform(1.12, 1.12, 128, 127));
 
         context.DrawRoundedRectangle(
-            new SolidColorBrush(Color.FromRgb(23, 109, 105)),
-            new Pen(new SolidColorBrush(Color.FromRgb(14, 85, 82)), 1.5),
-            new Rect(0.75, 0.75, 254.5, 254.5),
-            57.25,
-            57.25);
+            new SolidColorBrush(Color.FromRgb(249, 252, 251)),
+            new Pen(
+                new SolidColorBrush(Color.FromRgb(47, 110, 103)),
+                clipboardStrokeWidth),
+            new Rect(50, 34, 156, 199),
+            34,
+            34);
+        context.DrawRoundedRectangle(
+            new SolidColorBrush(Color.FromRgb(238, 140, 115)),
+            new Pen(
+                new SolidColorBrush(Color.FromRgb(47, 110, 103)),
+                clipStrokeWidth),
+            new Rect(96, 21, 64, 32),
+            12,
+            12);
 
-        context.PushTransform(new RotateTransform(-8, 96, 118));
+        var contentGroupHeight = (contentLineHeight * 3) + (contentLineGap * 2);
+        var contentTop = 134 - (contentGroupHeight / 2);
+        var contentLeft = 128 - (secondLineWidth / 2);
         context.DrawRoundedRectangle(
-            new SolidColorBrush(Color.FromRgb(229, 242, 237)),
+            new SolidColorBrush(Color.FromRgb(110, 166, 156)),
             null,
-            new Rect(48, 48, 112, 136),
-            20,
-            20);
+            new Rect(
+                contentLeft,
+                contentTop,
+                thirdLineWidth,
+                contentLineHeight),
+            contentLineHeight / 2,
+            contentLineHeight / 2);
         context.DrawRoundedRectangle(
-            new SolidColorBrush(Color.FromRgb(154, 188, 176)),
+            new SolidColorBrush(Color.FromRgb(232, 154, 134)),
             null,
-            new Rect(64, 77, 80, 10),
-            5,
-            5);
+            new Rect(
+                contentLeft,
+                contentTop + contentLineHeight + contentLineGap,
+                firstLineWidth,
+                contentLineHeight),
+            contentLineHeight / 2,
+            contentLineHeight / 2);
         context.DrawRoundedRectangle(
-            new SolidColorBrush(Color.FromRgb(182, 206, 197)),
+            new SolidColorBrush(Color.FromRgb(174, 204, 197)),
             null,
-            new Rect(64, 101, 64, 10),
-            5,
-            5);
-        context.Pop();
-
-        context.PushTransform(new RotateTransform(4, 145, 132));
-        context.DrawRoundedRectangle(
-            new SolidColorBrush(Color.FromRgb(255, 254, 251)),
-            new Pen(new SolidColorBrush(Color.FromRgb(217, 230, 223)), 1.5),
-            new Rect(94.75, 47.75, 108.5, 140.5),
-            18.25,
-            18.25);
-        context.DrawRoundedRectangle(
-            new SolidColorBrush(Color.FromRgb(23, 109, 105)),
-            null,
-            new Rect(107, 82, 73, 9),
-            4.5,
-            4.5);
-        context.DrawRoundedRectangle(
-            new SolidColorBrush(Color.FromRgb(185, 201, 194)),
-            null,
-            new Rect(107, 103, 58, 8),
-            4,
-            4);
-        context.DrawRoundedRectangle(
-            new SolidColorBrush(Color.FromRgb(210, 221, 216)),
-            null,
-            new Rect(107, 121, 68, 8),
-            4,
-            4);
-
-        var clip = new StreamGeometry();
-        using (var clipContext = clip.Open())
-        {
-            clipContext.BeginFigure(new Point(125, 47), true, true);
-            clipContext.LineTo(new Point(125, 33), true, true);
-            clipContext.BezierTo(new Point(125, 27), new Point(130, 23), new Point(135, 23), true, true);
-            clipContext.LineTo(new Point(157, 23), true, true);
-            clipContext.BezierTo(new Point(162, 23), new Point(167, 27), new Point(167, 33), true, true);
-            clipContext.LineTo(new Point(167, 47), true, true);
-            clipContext.LineTo(new Point(125, 47), true, true);
-        }
-
-        clip.Freeze();
-        context.DrawGeometry(new SolidColorBrush(Color.FromRgb(223, 96, 73)), null, clip);
-        context.DrawRoundedRectangle(
-            new SolidColorBrush(Color.FromRgb(249, 161, 142)),
-            null,
-            new Rect(131, 30, 30, 8),
-            4,
-            4);
-        context.Pop();
-
-        context.DrawEllipse(
-            new SolidColorBrush(Color.FromRgb(223, 96, 73)),
-            null,
-            new Point(190, 178),
-            24,
-            24);
-
-        var check = new StreamGeometry();
-        using (var checkContext = check.Open())
-        {
-            checkContext.BeginFigure(new Point(181, 178), false, false);
-            checkContext.LineTo(new Point(187, 184), true, true);
-            checkContext.LineTo(new Point(199, 171), true, true);
-        }
-
-        check.Freeze();
-        context.DrawGeometry(
-            null,
-            new Pen(new SolidColorBrush(Color.FromRgb(255, 254, 251)), 6)
-            {
-                StartLineCap = PenLineCap.Round,
-                EndLineCap = PenLineCap.Round,
-                LineJoin = PenLineJoin.Round
-            },
-            check);
+            new Rect(
+                contentLeft,
+                contentTop + ((contentLineHeight + contentLineGap) * 2),
+                secondLineWidth,
+                contentLineHeight),
+            contentLineHeight / 2,
+            contentLineHeight / 2);
     }
 
     var bitmap = new RenderTargetBitmap(size, size, 96, 96, PixelFormats.Pbgra32);

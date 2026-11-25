@@ -8,11 +8,13 @@ public sealed class AutoStartService
     private const string RunKeyPath =
         @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string ValueName = "ClipNest";
+    internal const string StartupArguments = "--tray";
 
     private readonly RegistryKey _registryRoot;
     private readonly string _runKeyPath;
     private readonly string _valueName;
     private readonly string _executablePath;
+    private readonly string _command;
 
     public AutoStartService(string executablePath)
         : this(
@@ -33,6 +35,7 @@ public sealed class AutoStartService
         _registryRoot = registryRoot ?? throw new ArgumentNullException(nameof(registryRoot));
         _runKeyPath = runKeyPath ?? throw new ArgumentNullException(nameof(runKeyPath));
         _valueName = valueName ?? throw new ArgumentNullException(nameof(valueName));
+        _command = $"\"{_executablePath}\" {StartupArguments}";
     }
 
     public bool TrySetEnabled(bool enabled, out string? error)
@@ -62,6 +65,25 @@ public sealed class AutoStartService
         }
     }
 
+    public bool IsEnabled()
+    {
+        try
+        {
+            using var key = _registryRoot.OpenSubKey(_runKeyPath);
+            return string.Equals(
+                key?.GetValue(_valueName) as string,
+                _command,
+                StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception exception) when (
+            exception is UnauthorizedAccessException
+            or System.Security.SecurityException
+            or IOException)
+        {
+            return false;
+        }
+    }
+
     private void Enable()
     {
         using var key = _registryRoot.CreateSubKey(_runKeyPath);
@@ -72,7 +94,7 @@ public sealed class AutoStartService
 
         key.SetValue(
             _valueName,
-            $"\"{_executablePath}\"",
+            _command,
             RegistryValueKind.String);
     }
 

@@ -4,6 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="设置"
     Width="450"
+    MinHeight="360"
     SizeToContent="Height"
     AllowsTransparency="True"
     Background="Transparent"
@@ -11,24 +12,21 @@
     PreviewKeyDown="Window_PreviewKeyDown"
     ResizeMode="NoResize"
     ShowInTaskbar="False"
+    SnapsToDevicePixels="True"
     Topmost="True"
+    UseLayoutRounding="True"
     WindowStartupLocation="CenterOwner"
     WindowStyle="None">
 
     <Border
         Margin="10"
-        Background="{StaticResource PanelBrush}"
-        BorderBrush="{StaticResource LineBrush}"
+        Background="{DynamicResource PanelBrush}"
+        BorderBrush="{DynamicResource LineBrush}"
         BorderThickness="1"
         CornerRadius="12"
-        Effect="{StaticResource WindowShadow}">
+        Effect="{DynamicResource WindowShadow}">
         <Grid Margin="20,16,20,17">
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
@@ -43,13 +41,13 @@
                     <TextBlock
                         FontSize="16"
                         FontWeight="SemiBold"
-                        Foreground="{StaticResource InkBrush}"
+                        Foreground="{DynamicResource InkBrush}"
                         Text="设置" />
                     <TextBlock
                         Margin="0,3,0,0"
-                        FontSize="11"
-                        Foreground="{StaticResource MutedBrush}"
-                        Text="显示、快捷键与行为" />
+                        FontSize="11.5"
+                        Foreground="{DynamicResource MutedBrush}"
+                        Text="外观、显示、快捷键与行为" />
                 </StackPanel>
                 <Button
                     Grid.Column="1"
@@ -67,251 +65,339 @@
                 </Button>
             </Grid>
 
-            <Grid Grid.Row="1" Margin="0,18,0,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="80" />
-                </Grid.ColumnDefinitions>
-                <StackPanel>
-                    <TextBlock
-                        FontSize="12.5"
-                        FontWeight="SemiBold"
-                        Foreground="{StaticResource InkBrush}"
-                        Text="卡片字号" />
-                    <TextBlock
-                        Margin="0,3,0,0"
-                        FontSize="10.5"
-                        Foreground="{StaticResource MutedBrush}"
-                        Text="文本字号，可设置 11–20 px" />
-                </StackPanel>
-                <TextBox
-                    x:Name="FontSizeTextBox"
-                    Grid.Column="1"
-                    DataObject.Pasting="FloatTextBox_Pasting"
-                    Padding="5,4"
-                    PreviewTextInput="FloatTextBox_PreviewTextInput"
-                    Style="{StaticResource SettingsValueTextBoxStyle}"
-                    TextAlignment="Center" />
-            </Grid>
+            <ScrollViewer
+                Grid.Row="1"
+                Margin="0,14,0,0"
+                CanContentScroll="False"
+                HorizontalScrollBarVisibility="Disabled"
+                VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="0,0,4,0">
+                    <Border
+                        Padding="11,9"
+                        Background="{DynamicResource SubtleSurfaceBrush}"
+                        BorderBrush="{DynamicResource LineBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8">
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock
+                                        FontSize="12.5"
+                                        FontWeight="SemiBold"
+                                        Foreground="{DynamicResource InkBrush}"
+                                        Text="主题模式" />
+                                    <TextBlock
+                                        Margin="0,3,0,0"
+                                        FontSize="11.5"
+                                        Foreground="{DynamicResource MutedBrush}"
+                                        Text="切换后立即预览" />
+                                </StackPanel>
+                                <StackPanel
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center"
+                                    Orientation="Horizontal">
+                                    <RadioButton
+                                        x:Name="FollowSystemThemeRadio"
+                                        AutomationProperties.Name="跟随系统主题"
+                                        Checked="ThemeRadio_Checked"
+                                        Content="跟随系统"
+                                        GroupName="ThemeMode"
+                                        Style="{StaticResource SegmentedRadioButtonStyle}"
+                                        Tag="FollowSystem" />
+                                    <RadioButton
+                                        x:Name="LightThemeRadio"
+                                        AutomationProperties.Name="浅色主题"
+                                        Checked="ThemeRadio_Checked"
+                                        Content="浅色"
+                                        GroupName="ThemeMode"
+                                        Style="{StaticResource SegmentedRadioButtonStyle}"
+                                        Tag="Light" />
+                                    <RadioButton
+                                        x:Name="DarkThemeRadio"
+                                        AutomationProperties.Name="深色主题"
+                                        Checked="ThemeRadio_Checked"
+                                        Content="深色"
+                                        GroupName="ThemeMode"
+                                        Margin="0"
+                                        Style="{StaticResource SegmentedRadioButtonStyle}"
+                                        Tag="Dark" />
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
 
-            <Grid Grid.Row="2" Margin="0,16,0,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <StackPanel>
-                    <TextBlock
-                        FontSize="12.5"
-                        FontWeight="SemiBold"
-                        Foreground="{StaticResource InkBrush}"
-                        Text="全局快捷键" />
-                    <TextBlock
-                        Margin="0,3,0,0"
-                        FontSize="10.5"
-                        Foreground="{StaticResource MutedBrush}"
-                        Text="点击录制后按下新的组合键" />
-                </StackPanel>
-                <Button
-                    x:Name="HotKeyButton"
-                    Grid.Column="1"
-                    MinWidth="130"
-                    Padding="12,7"
-                    Click="HotKeyButton_Click"
-                    Content="F4"
-                    LostKeyboardFocus="HotKeyButton_LostKeyboardFocus"
-                    Style="{StaticResource QuietTextButtonStyle}" />
-            </Grid>
+                    <Grid Margin="0,18,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="80" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock
+                                FontSize="12.5"
+                                FontWeight="SemiBold"
+                                Foreground="{DynamicResource InkBrush}"
+                                Text="复制内容文本大小" />
+                            <TextBlock
+                                Margin="0,3,0,0"
+                                FontSize="11.5"
+                                Foreground="{DynamicResource MutedBrush}"
+                                Text="11–24 px" />
+                        </StackPanel>
+                        <TextBox
+                            x:Name="FontSizeTextBox"
+                            Grid.Column="1"
+                            DataObject.Pasting="FloatTextBox_Pasting"
+                            Padding="5,2"
+                            PreviewTextInput="FloatTextBox_PreviewTextInput"
+                            Style="{StaticResource SettingsValueTextBoxStyle}"
+                            TextAlignment="Center" />
+                    </Grid>
 
-            <Grid Grid.Row="3" Margin="0,16,0,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <StackPanel>
-                    <TextBlock
-                        FontSize="12.5"
-                        FontWeight="SemiBold"
-                        Foreground="{StaticResource InkBrush}"
-                        Text="开机自启动" />
-                    <TextBlock
-                        Margin="0,3,0,0"
-                        FontSize="10.5"
-                        Foreground="{StaticResource MutedBrush}"
-                        Text="登录 Windows 后自动运行 ClipNest" />
-                </StackPanel>
-                <CheckBox
-                    x:Name="AutoStartCheckBox"
-                    Grid.Column="1"
-                    VerticalAlignment="Center"
-                    AutomationProperties.Name="开机自启动"
-                    Style="{StaticResource ToggleSwitchStyle}" />
-            </Grid>
-
-            <Grid Grid.Row="4" Margin="0,16,0,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <StackPanel>
-                    <TextBlock
-                        FontSize="12.5"
-                        FontWeight="SemiBold"
-                        Foreground="{StaticResource InkBrush}"
-                        Text="复制后自动隐藏" />
-                    <TextBlock
-                        Margin="0,3,0,0"
-                        FontSize="10.5"
-                        Foreground="{StaticResource MutedBrush}"
-                        Text="复制记录后自动收起主窗口" />
-                </StackPanel>
-                <CheckBox
-                    x:Name="HideAfterCopyCheckBox"
-                    Grid.Column="1"
-                    VerticalAlignment="Center"
-                    AutomationProperties.Name="复制后自动隐藏"
-                    Style="{StaticResource ToggleSwitchStyle}" />
-            </Grid>
-
-            <Border
-                Grid.Row="5"
-                Margin="0,16,0,0"
-                Padding="0,14,0,0"
-                BorderBrush="{StaticResource LineBrush}"
-                BorderThickness="0,1,0,0">
-                <StackPanel>
-                    <Grid>
+                    <Grid Margin="0,16,0,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock
-                            FontSize="12.5"
-                            FontWeight="SemiBold"
-                            Foreground="{StaticResource InkBrush}"
-                            Text="关于 ClipNest" />
-                        <TextBlock
-                            x:Name="VersionTextBlock"
+                        <StackPanel>
+                            <TextBlock
+                                FontSize="12.5"
+                                FontWeight="SemiBold"
+                                Foreground="{DynamicResource InkBrush}"
+                                Text="快捷键" />
+                            <TextBlock
+                                Margin="0,3,0,0"
+                                FontSize="11.5"
+                                Foreground="{DynamicResource MutedBrush}"
+                                Text="显示或隐藏面板的快捷键" />
+                        </StackPanel>
+                        <Button
+                            x:Name="HotKeyButton"
+                            Grid.Column="1"
+                            MinWidth="130"
+                            Padding="12,7"
+                            Click="HotKeyButton_Click"
+                            Content="F4"
+                            LostKeyboardFocus="HotKeyButton_LostKeyboardFocus"
+                            Style="{StaticResource QuietTextButtonStyle}" />
+                    </Grid>
+
+                    <Grid Margin="0,16,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock
+                                FontSize="12.5"
+                                FontWeight="SemiBold"
+                                Foreground="{DynamicResource InkBrush}"
+                                Text="开机自启动" />
+                            <TextBlock
+                                Margin="0,3,0,0"
+                                FontSize="11.5"
+                                Foreground="{DynamicResource MutedBrush}"
+                                Text="登录 Windows 后自动运行 ClipNest" />
+                        </StackPanel>
+                        <CheckBox
+                            x:Name="AutoStartCheckBox"
                             Grid.Column="1"
                             VerticalAlignment="Center"
-                            FontSize="10.5"
-                            Foreground="{StaticResource MutedBrush}"
-                            Text="ClipNest" />
+                            AutomationProperties.Name="开机自启动"
+                            Style="{StaticResource ToggleSwitchStyle}" />
                     </Grid>
-                    <TextBlock
-                        Margin="0,5,0,0"
-                        FontSize="10.5"
-                        Foreground="{StaticResource MutedBrush}"
-                        Text="轻巧、常驻桌面最上层的 Windows 粘贴板历史工具，历史记录仅保存在本机。"
-                        TextWrapping="Wrap" />
-                    <Grid Margin="0,10,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="72" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-                        <TextBlock
-                            FontSize="10.5"
-                            Foreground="{StaticResource MutedBrush}"
-                            Text="运行环境" />
-                        <TextBlock
-                            Grid.Column="1"
-                            FontSize="10.5"
-                            Foreground="{StaticResource InkBrush}"
-                            Text=".NET Framework 4.8" />
-                        <TextBlock
-                            Grid.Row="1"
-                            Margin="0,6,0,0"
-                            FontSize="10.5"
-                            Foreground="{StaticResource MutedBrush}"
-                            Text="许可证" />
-                        <TextBlock
-                            Grid.Row="1"
-                            Grid.Column="1"
-                            Margin="0,6,0,0"
-                            FontSize="10.5"
-                            Foreground="{StaticResource InkBrush}"
-                            Text="MIT License" />
-                        <TextBlock
-                            Grid.Row="2"
-                            Margin="0,6,0,0"
-                            FontSize="10.5"
-                            Foreground="{StaticResource MutedBrush}"
-                            Text="数据位置" />
-                        <TextBlock
-                            Grid.Row="2"
-                            Grid.Column="1"
-                            Margin="0,6,0,0"
-                            FontSize="10.5"
-                            Foreground="{StaticResource InkBrush}"
-                            Text="%LOCALAPPDATA%\ClipNest" />
-                        <TextBlock
-                            Grid.Row="3"
-                            Margin="0,6,0,0"
-                            FontSize="10.5"
-                            Foreground="{StaticResource MutedBrush}"
-                            Text="项目链接" />
-                        <TextBlock
-                            Grid.Row="3"
-                            Grid.Column="1"
-                            Margin="0,6,0,0"
-                            FontSize="10.5"
-                            Foreground="{StaticResource InkBrush}">
-                            <Hyperlink
-                                AutomationProperties.Name="打开 GitHub 项目主页"
-                                Foreground="{StaticResource SeaBrush}"
-                                NavigateUri="https://github.com/echo-jianyu/ClipNest"
-                                RequestNavigate="ProjectLink_RequestNavigate"
-                                TextDecorations="Underline">GitHub</Hyperlink>
-                            <Run Text="  ·  " />
-                            <Hyperlink
-                                AutomationProperties.Name="打开 Gitee 项目主页"
-                                Foreground="{StaticResource SeaBrush}"
-                                NavigateUri="https://gitee.com/echo-jian/clipnest"
-                                RequestNavigate="ProjectLink_RequestNavigate"
-                                TextDecorations="Underline">Gitee</Hyperlink>
-                        </TextBlock>
-                    </Grid>
-                </StackPanel>
-            </Border>
 
-            <TextBlock
-                x:Name="ValidationMessage"
-                Grid.Row="6"
-                Margin="0,10,0,0"
-                FontSize="10.5"
-                Foreground="{StaticResource AccentBrush}"
-                TextWrapping="Wrap"
-                Visibility="Collapsed" />
+                    <Grid Margin="0,16,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock
+                                FontSize="12.5"
+                                FontWeight="SemiBold"
+                                Foreground="{DynamicResource InkBrush}"
+                                Text="隐藏顶部标题栏" />
+                            <TextBlock
+                                Margin="0,3,0,0"
+                                FontSize="11.5"
+                                Foreground="{DynamicResource MutedBrush}"
+                                Text="主页面仅显示历史卡片" />
+                        </StackPanel>
+                        <CheckBox
+                            x:Name="HideTitleBarCheckBox"
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            AutomationProperties.Name="隐藏顶部标题栏"
+                            Style="{StaticResource ToggleSwitchStyle}" />
+                    </Grid>
+
+                    <Grid Margin="0,16,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock
+                                FontSize="12.5"
+                                FontWeight="SemiBold"
+                                Foreground="{DynamicResource InkBrush}"
+                                Text="复制后自动隐藏" />
+                            <TextBlock
+                                Margin="0,3,0,0"
+                                FontSize="11.5"
+                                Foreground="{DynamicResource MutedBrush}"
+                                Text="点击复制记录后自动隐藏主窗口" />
+                        </StackPanel>
+                        <CheckBox
+                            x:Name="HideAfterCopyCheckBox"
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            AutomationProperties.Name="复制后自动隐藏"
+                            Style="{StaticResource ToggleSwitchStyle}" />
+                    </Grid>
+
+                    <Border
+                        Margin="0,16,0,0"
+                        Padding="0,14,0,0"
+                        BorderBrush="{DynamicResource LineBrush}"
+                        BorderThickness="0,1,0,0">
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock
+                                    FontSize="12.5"
+                                    FontWeight="SemiBold"
+                                    Foreground="{DynamicResource InkBrush}"
+                                    Text="关于 ClipNest" />
+                                <TextBlock
+                                    x:Name="VersionTextBlock"
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center"
+                                    FontSize="11.5"
+                                    Foreground="{DynamicResource MutedBrush}"
+                                    Text="ClipNest" />
+                            </Grid>
+                            <TextBlock
+                                Margin="0,5,0,0"
+                                FontSize="11.5"
+                                Foreground="{DynamicResource MutedBrush}"
+                                Text="轻巧、常驻桌面最上层的 Windows 粘贴板历史工具。"
+                                TextWrapping="Wrap" />
+                            <Grid Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="72" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <TextBlock
+                                    FontSize="11.5"
+                                    Foreground="{DynamicResource MutedBrush}"
+                                    Text="运行环境" />
+                                <TextBlock
+                                    Grid.Column="1"
+                                    FontSize="11.5"
+                                    Foreground="{DynamicResource InkBrush}"
+                                    Text=".NET Framework 4.8" />
+                                <TextBlock
+                                    Grid.Row="1"
+                                    Margin="0,6,0,0"
+                                    FontSize="11.5"
+                                    Foreground="{DynamicResource MutedBrush}"
+                                    Text="数据位置" />
+                                <TextBlock
+                                    Grid.Row="1"
+                                    Grid.Column="1"
+                                    Margin="0,6,0,0"
+                                    FontSize="11.5">
+                                    <Hyperlink
+                                        AutomationProperties.Name="打开 ClipNest 数据文件夹"
+                                        Click="DataLocation_Click"
+                                        Foreground="{DynamicResource SeaBrush}"
+                                        TextDecorations="Underline">
+                                        <Run Text="%LOCALAPPDATA%\ClipNest" />
+                                    </Hyperlink>
+                                </TextBlock>
+                                <TextBlock
+                                    Grid.Row="2"
+                                    Margin="0,6,0,0"
+                                    FontSize="11.5"
+                                    Foreground="{DynamicResource MutedBrush}"
+                                    Text="项目链接" />
+                                <TextBlock
+                                    Grid.Row="2"
+                                    Grid.Column="1"
+                                    Margin="0,6,0,0"
+                                    FontSize="11.5"
+                                    Foreground="{DynamicResource InkBrush}">
+                                    <Hyperlink
+                                        AutomationProperties.Name="打开 GitHub 项目主页"
+                                        Foreground="{DynamicResource SeaBrush}"
+                                        NavigateUri="https://github.com/echo-jianyu/ClipNest"
+                                        RequestNavigate="ProjectLink_RequestNavigate"
+                                        TextDecorations="Underline">GitHub</Hyperlink>
+                                    <Run Text="  ·  " />
+                                    <Hyperlink
+                                        AutomationProperties.Name="打开 Gitee 项目主页"
+                                        Foreground="{DynamicResource SeaBrush}"
+                                        NavigateUri="https://gitee.com/echo-jian/clipnest"
+                                        RequestNavigate="ProjectLink_RequestNavigate"
+                                        TextDecorations="Underline">Gitee</Hyperlink>
+                                </TextBlock>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
 
             <Border
-                Grid.Row="7"
-                Margin="0,16,0,0"
+                Grid.Row="2"
+                Margin="0,14,0,0"
                 Padding="0,14,0,0"
-                BorderBrush="{StaticResource LineBrush}"
+                BorderBrush="{DynamicResource LineBrush}"
                 BorderThickness="0,1,0,0">
-                <StackPanel
-                    HorizontalAlignment="Right"
-                    Orientation="Horizontal">
-                    <Button
-                        MinWidth="72"
-                        Padding="13,6"
-                        Click="CancelButton_Click"
-                        Content="取消"
-                        Style="{StaticResource QuietTextButtonStyle}" />
-                    <Button
-                        MinWidth="80"
-                        Margin="7,0,0,0"
-                        Padding="13,6"
-                        Click="SaveButton_Click"
-                        Content="保存"
-                        IsDefault="True"
-                        Style="{StaticResource TextButtonStyle}" />
-                </StackPanel>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <TextBlock
+                        x:Name="ValidationMessage"
+                        Margin="0,0,0,10"
+                        FontSize="11.5"
+                        Foreground="{DynamicResource AccentBrush}"
+                        TextWrapping="Wrap"
+                        Visibility="Collapsed" />
+                    <StackPanel
+                        Grid.Row="1"
+                        HorizontalAlignment="Right"
+                        Orientation="Horizontal">
+                        <Button
+                            MinWidth="72"
+                            Padding="13,6"
+                            Click="CancelButton_Click"
+                            Content="取消"
+                            Style="{StaticResource QuietTextButtonStyle}" />
+                        <Button
+                            MinWidth="80"
+                            Margin="7,0,0,0"
+                            Padding="13,6"
+                            Click="SaveButton_Click"
+                            Content="保存"
+                            IsDefault="True"
+                            Style="{StaticResource TextButtonStyle}" />
+                    </StackPanel>
+                </Grid>
             </Border>
         </Grid>
     </Border>

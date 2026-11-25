@@ -21,6 +21,23 @@ internal static class Program
         var confirmMode = args.Contains("--confirm", StringComparer.OrdinalIgnoreCase);
         var settingsMode = args.Contains("--settings", StringComparer.OrdinalIgnoreCase);
         var wideMode = args.Contains("--wide", StringComparer.OrdinalIgnoreCase);
+        var darkMode = args.Contains("--dark", StringComparer.OrdinalIgnoreCase);
+        var compactMode = args.Contains("--compact", StringComparer.OrdinalIgnoreCase);
+        var hideTitleBarMode = args.Contains(
+            "--hide-title-bar",
+            StringComparer.OrdinalIgnoreCase);
+        var focusNumberMode = args.Contains("--focus-number", StringComparer.OrdinalIgnoreCase);
+        var fontSizeArgument = args.FirstOrDefault(argument => argument.StartsWith(
+            "--font-size=",
+            StringComparison.OrdinalIgnoreCase));
+        var settingsFontSize = fontSizeArgument is not null
+            && double.TryParse(
+                fontSizeArgument.Substring("--font-size=".Length),
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out var requestedFontSize)
+            ? requestedFontSize
+            : 13.5;
         var outputArgument = args.FirstOrDefault(argument => !argument.StartsWith("--", StringComparison.Ordinal));
         var outputPath = outputArgument is not null
             ? Path.GetFullPath(outputArgument)
@@ -28,11 +45,13 @@ internal static class Program
                 AppContext.BaseDirectory,
                 "..", "..", "..", "..", "..",
                 "docs",
-                imageEditMode
-                    ? "clipnest-image-edit.png"
-                    : editMode
-                        ? "clipnest-edit.png"
-                        : "clipnest-screenshot.png"));
+                darkMode
+                    ? "clipnest-dark.png"
+                    : imageEditMode
+                        ? "clipnest-image-edit.png"
+                        : editMode
+                            ? "clipnest-edit.png"
+                            : "clipnest-screenshot.png"));
 
         var application = new System.Windows.Application
         {
@@ -44,6 +63,8 @@ internal static class Program
                 "pack://application:,,,/ClipNest;component/Themes/Theme.xaml",
                 UriKind.Absolute)
         });
+        using var themeService = new ThemeService(application.Dispatcher);
+        themeService.ApplyTheme(AppThemeMode.Light);
 
         if (confirmMode)
         {
@@ -51,6 +72,11 @@ internal static class Program
                 "清空历史",
                 "此操作会清空所有文字和图片记录，无法撤销，确定清空吗？",
                 "清空历史");
+            if (darkMode)
+            {
+                themeService.ApplyTheme(AppThemeMode.Dark);
+            }
+
             RenderWindowContent(confirmWindow, outputPath);
             application.Shutdown();
             return;
@@ -59,11 +85,60 @@ internal static class Program
         if (settingsMode)
         {
             var settingsWindow = new SettingsWindow(
-                13.5,
+                settingsFontSize,
                 HotKeyDefinition.Default,
                 hideAfterCopy: true,
-                autoStartOnLogin: true);
+                autoStartOnLogin: true,
+                themeMode: AppThemeMode.Light,
+                hideTitleBar: false);
+            settingsWindow.ThemePreviewRequested += themeService.ApplyTheme;
+            if (compactMode)
+            {
+                settingsWindow.MaxHeight = 520;
+            }
+
+            PrimeWindowContent(settingsWindow);
+            if (darkMode)
+            {
+                if (settingsWindow.FindName("DarkThemeRadio")
+                    is System.Windows.Controls.RadioButton darkThemeRadio)
+                {
+                    darkThemeRadio.IsChecked = true;
+                }
+            }
+
+            if (focusNumberMode)
+            {
+                settingsWindow.WindowStartupLocation = WindowStartupLocation.Manual;
+                settingsWindow.Left = -10000;
+                settingsWindow.Top = -10000;
+                settingsWindow.ShowActivated = false;
+                settingsWindow.Show();
+                if (settingsWindow.FindName("FontSizeTextBox")
+                    is System.Windows.Controls.TextBox fontSizeTextBox)
+                {
+                    fontSizeTextBox.Focus();
+                    System.Windows.Input.Keyboard.Focus(fontSizeTextBox);
+                    fontSizeTextBox.CaretIndex = fontSizeTextBox.Text.Length;
+                }
+
+                var focusFrame = new DispatcherFrame();
+                var focusTimer = new DispatcherTimer(
+                    TimeSpan.FromMilliseconds(120),
+                    DispatcherPriority.Background,
+                    (_, _) => focusFrame.Continue = false,
+                    Dispatcher.CurrentDispatcher);
+                focusTimer.Start();
+                Dispatcher.PushFrame(focusFrame);
+                focusTimer.Stop();
+            }
+
             RenderWindowContent(settingsWindow, outputPath);
+            if (focusNumberMode)
+            {
+                settingsWindow.Close();
+            }
+
             application.Shutdown();
             return;
         }
@@ -72,6 +147,8 @@ internal static class Program
         var historyStore = new HistoryStore(Path.Combine(tempDirectory, "history.json"));
         var settingsStore = new SettingsStore(Path.Combine(tempDirectory, "settings.json"));
         var clipboard = new PreviewClipboardService();
+        var previewWidth = wideMode ? 600 : compactMode ? 320 : 400;
+        var previewHeight = compactMode ? 240 : 400;
         using var viewModel = new MainViewModel(clipboard, []);
         using var window = new MainWindow(
             viewModel,
@@ -79,7 +156,12 @@ internal static class Program
             historyStore,
             settingsStore,
             new AutoStartService(Path.Combine(tempDirectory, "ClipNest.exe")),
-            new AppSettings());
+            themeService,
+            new AppSettings
+            {
+                ThemeMode = darkMode ? AppThemeMode.Dark : AppThemeMode.Light,
+                HideTitleBar = hideTitleBarMode
+            });
 
         clipboard.Emit(ClipContent.FromText("https://github.com/"));
         clipboard.Emit(ClipContent.FromText(
@@ -113,10 +195,13 @@ internal static class Program
             viewModel.SearchText = "ClipNest";
         }
 
-        var previewWidth = wideMode ? 600 : 400;
-        const double previewHeight = 400;
         window.Width = previewWidth;
         window.Height = previewHeight;
+        PrimeWindowContent(window);
+        if (darkMode)
+        {
+            themeService.ApplyTheme(AppThemeMode.Dark);
+        }
 
         var content = (FrameworkElement)window.Content;
         content.Measure(new Size(previewWidth, previewHeight));
@@ -135,7 +220,7 @@ internal static class Program
         content.UpdateLayout();
 
         var pixelWidth = previewWidth * 2;
-        const int pixelHeight = (int)(previewHeight * 2);
+        var pixelHeight = (int)(previewHeight * 2);
         var renderedWindow = new RenderTargetBitmap(
             pixelWidth,
             pixelHeight,
@@ -176,6 +261,44 @@ internal static class Program
         Console.WriteLine($"Wrote {outputPath}");
     }
 
+    private static void PrimeWindowContent(Window window)
+    {
+        var content = (FrameworkElement)window.Content;
+        var measureWidth = window.SizeToContent is SizeToContent.Width or SizeToContent.WidthAndHeight
+            ? double.PositiveInfinity
+            : window.Width;
+        var measureHeight = window.SizeToContent is SizeToContent.Height or SizeToContent.WidthAndHeight
+            ? double.PositiveInfinity
+            : window.Height;
+        content.Measure(new Size(measureWidth, measureHeight));
+        var renderWidth = window.SizeToContent is SizeToContent.Width or SizeToContent.WidthAndHeight
+            ? content.DesiredSize.Width
+            : window.Width;
+        var renderHeight = window.SizeToContent is SizeToContent.Height or SizeToContent.WidthAndHeight
+            ? content.DesiredSize.Height
+            : window.Height;
+        if (!double.IsInfinity(window.MaxHeight))
+        {
+            renderHeight = Math.Min(renderHeight, window.MaxHeight);
+        }
+
+        content.Measure(new Size(renderWidth, renderHeight));
+        content.Arrange(new Rect(0, 0, renderWidth, renderHeight));
+        content.UpdateLayout();
+        if (renderWidth < 1 || renderHeight < 1)
+        {
+            return;
+        }
+
+        var rendered = new RenderTargetBitmap(
+            (int)Math.Round(renderWidth),
+            (int)Math.Round(renderHeight),
+            96,
+            96,
+            PixelFormats.Pbgra32);
+        rendered.Render(content);
+    }
+
     private static void RenderWindowContent(
         Window window,
         string outputPath)
@@ -194,6 +317,12 @@ internal static class Program
         var renderHeight = window.SizeToContent is SizeToContent.Height or SizeToContent.WidthAndHeight
             ? content.DesiredSize.Height
             : window.Height;
+        if (!double.IsInfinity(window.MaxHeight))
+        {
+            renderHeight = Math.Min(renderHeight, window.MaxHeight);
+        }
+
+        content.Measure(new Size(renderWidth, renderHeight));
         content.Arrange(new Rect(0, 0, renderWidth, renderHeight));
         content.UpdateLayout();
 

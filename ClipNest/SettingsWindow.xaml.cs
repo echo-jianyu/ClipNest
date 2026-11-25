@@ -7,6 +7,7 @@ using System.Windows.Input;
 using System.Windows.Navigation;
 using ClipNest.Infrastructure;
 using ClipNest.Models;
+using ClipNest.Services;
 
 namespace ClipNest;
 
@@ -14,18 +15,31 @@ public partial class SettingsWindow : Window
 {
     private HotKeyDefinition _hotKey;
     private bool _isCapturingHotKey;
+    private bool _isInitializingTheme;
 
     public SettingsWindow(
         double cardFontSize,
         HotKeyDefinition hotKey,
         bool hideAfterCopy,
-        bool autoStartOnLogin)
+        bool autoStartOnLogin,
+        AppThemeMode themeMode,
+        bool hideTitleBar)
     {
         InitializeComponent();
+        DpiTextRendering.Apply(this);
         FontSizeTextBox.Text = cardFontSize.ToString("0.#", CultureInfo.CurrentCulture);
         _hotKey = hotKey ?? throw new ArgumentNullException(nameof(hotKey));
         HideAfterCopyCheckBox.IsChecked = hideAfterCopy;
         AutoStartCheckBox.IsChecked = autoStartOnLogin;
+        HideTitleBarCheckBox.IsChecked = hideTitleBar;
+        ThemeMode = Enum.IsDefined(typeof(AppThemeMode), themeMode)
+            ? themeMode
+            : AppThemeMode.FollowSystem;
+        _isInitializingTheme = true;
+        FollowSystemThemeRadio.IsChecked = ThemeMode == AppThemeMode.FollowSystem;
+        LightThemeRadio.IsChecked = ThemeMode == AppThemeMode.Light;
+        DarkThemeRadio.IsChecked = ThemeMode == AppThemeMode.Dark;
+        _isInitializingTheme = false;
         VersionTextBlock.Text = $"版本 {AppVersion.Display}";
         UpdateHotKeyButton();
     }
@@ -38,6 +52,12 @@ public partial class SettingsWindow : Window
     public bool HideAfterCopy { get; private set; }
 
     public bool AutoStartOnLogin { get; private set; }
+
+    public bool HideTitleBar { get; private set; }
+
+    public AppThemeMode ThemeMode { get; private set; }
+
+    public event Action<AppThemeMode>? ThemePreviewRequested;
 
     private void SaveButton_Click(object sender, RoutedEventArgs eventArgs)
     {
@@ -66,12 +86,27 @@ public partial class SettingsWindow : Window
         CardFontSize = fontSize;
         HideAfterCopy = HideAfterCopyCheckBox.IsChecked == true;
         AutoStartOnLogin = AutoStartCheckBox.IsChecked == true;
+        HideTitleBar = HideTitleBarCheckBox.IsChecked == true;
         DialogResult = true;
     }
 
     private void CancelButton_Click(object sender, RoutedEventArgs eventArgs)
     {
         DialogResult = false;
+    }
+
+    private void ThemeRadio_Checked(object sender, RoutedEventArgs eventArgs)
+    {
+        if (_isInitializingTheme
+            || sender is not RadioButton { Tag: string tag }
+            || !Enum.TryParse(tag, ignoreCase: true, out AppThemeMode mode)
+            || !Enum.IsDefined(typeof(AppThemeMode), mode))
+        {
+            return;
+        }
+
+        ThemeMode = mode;
+        ThemePreviewRequested?.Invoke(mode);
     }
 
     private void HotKeyButton_Click(object sender, RoutedEventArgs eventArgs)
@@ -268,6 +303,33 @@ public partial class SettingsWindow : Window
             MessageBox.Show(
                 this,
                 $"无法打开项目链接。\n\n{exception.Message}",
+                "ClipNest",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+    }
+
+    private void DataLocation_Click(object sender, RoutedEventArgs eventArgs)
+    {
+        eventArgs.Handled = true;
+        try
+        {
+            Directory.CreateDirectory(AppPaths.DataDirectory);
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = AppPaths.DataDirectory,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception exception) when (
+            exception is InvalidOperationException
+            or Win32Exception
+            or IOException
+            or UnauthorizedAccessException)
+        {
+            MessageBox.Show(
+                this,
+                $"无法打开数据文件夹。\n\n{exception.Message}",
                 "ClipNest",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);

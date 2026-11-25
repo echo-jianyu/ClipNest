@@ -10,6 +10,7 @@ internal static class NativeMethods
     internal const int WmHotKey = 0x0312;
     internal const int WmClipboardUpdate = 0x031D;
     internal const int WmMouseActivate = 0x0021;
+    internal const int WmSettingChange = 0x001A;
     internal const int MaNoActivate = 3;
     internal const uint ModNoRepeat = 0x4000;
     internal const uint VkF4 = 0x73;
@@ -17,6 +18,10 @@ internal static class NativeMethods
     internal const uint EventSystemForeground = 0x0003;
     internal const uint WineventOutOfContext = 0x0000;
     internal const uint WineventSkipOwnProcess = 0x0002;
+    internal const uint SwpNoSize = 0x0001;
+    internal const uint SwpNoZOrder = 0x0004;
+    internal const uint SwpNoActivate = 0x0010;
+    internal const uint SwpNoOwnerZOrder = 0x0200;
 
     [UnmanagedFunctionPointer(CallingConvention.Winapi)]
     internal delegate void WinEventDelegate(
@@ -48,6 +53,25 @@ internal static class NativeMethods
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool SetForegroundWindow(IntPtr hwnd);
 
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool GetCursorPos(out PointStruct point);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool GetWindowRect(IntPtr hwnd, out RectStruct rect);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool SetWindowPos(
+        IntPtr hwnd,
+        IntPtr insertAfter,
+        int x,
+        int y,
+        int width,
+        int height,
+        uint flags);
+
     [DllImport("user32.dll")]
     internal static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint flags);
 
@@ -74,6 +98,13 @@ internal static class NativeMethods
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool UnhookWinEvent(IntPtr hook);
+
+    [DllImport("shcore.dll")]
+    internal static extern int GetDpiForMonitor(
+        IntPtr monitor,
+        int dpiType,
+        out uint dpiX,
+        out uint dpiY);
 
     [DllImport("user32.dll", EntryPoint = "GetWindowLongW", SetLastError = true)]
     private static extern int GetWindowLong32(IntPtr hwnd, int index);

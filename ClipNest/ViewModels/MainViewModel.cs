@@ -238,6 +238,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public bool CanUndoDelete => _lastDeletedItem is not null;
 
+    public IReadOnlyCollection<string> GetProtectedImageFileNames()
+    {
+        return _lastDeletedItem is { IsImage: true, ImageFilePath: not null } item
+            ? new[] { Path.GetFileName(item.ImageFilePath) }
+            : Array.Empty<string>();
+    }
+
     public event EventHandler? HistoryChanged;
 
     public event EventHandler? ItemCopied;
@@ -549,6 +556,19 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(CanUndoDelete));
         NotifyHistoryChanged();
         NotificationRequested?.Invoke("记录已删除", true);
+    }
+
+    public void DiscardUndo()
+    {
+        if (_lastDeletedItem is null)
+        {
+            return;
+        }
+
+        _lastDeletedItem = null;
+        UndoDeleteCommand.RaiseCanExecuteChanged();
+        OnPropertyChanged(nameof(CanUndoDelete));
+        NotifyHistoryChanged();
     }
 
     private void UndoDelete()

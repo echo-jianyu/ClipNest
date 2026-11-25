@@ -200,6 +200,37 @@ public sealed class HistoryStoreTests
     }
 
     [Fact]
+    public async Task Save_KeepsImageWhileDeleteUndoIsAvailable()
+    {
+        var directory = CreateTempDirectory();
+        var path = Path.Combine(directory, "history.json");
+
+        try
+        {
+            using var store = new HistoryStore(path);
+            var image = ClipItem.Create(ClipContent.FromImage(
+                Convert.FromBase64String(OnePixelPngBase64),
+                1,
+                1));
+            await store.SaveAsync([image]);
+            var imagePath = Assert.Single(
+                Directory.GetFiles(Path.Combine(directory, "images"), "*.png"));
+
+            await store.SaveAsync(
+                Array.Empty<ClipItem>(),
+                [Path.GetFileName(imagePath)]);
+            Assert.True(File.Exists(imagePath));
+
+            await store.SaveAsync(Array.Empty<ClipItem>());
+            Assert.False(File.Exists(imagePath));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task Save_DoesNotOverwriteAnImageEditedWhileSnapshotIsPersisted()
     {
         var directory = CreateTempDirectory();

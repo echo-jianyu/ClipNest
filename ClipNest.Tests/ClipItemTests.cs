@@ -45,10 +45,32 @@ public sealed class ClipItemTests
         var tiny = ClipItem.DecodeThumbnail(EncodePng(20, 20));
 
         Assert.NotNull(tall);
-        Assert.InRange(Math.Max(tall.PixelWidth, tall.PixelHeight), 1, 640);
+        Assert.InRange(Math.Max(tall.PixelWidth, tall.PixelHeight), 1, 1280);
         Assert.NotNull(tiny);
         Assert.Equal(20, tiny.PixelWidth);
         Assert.Equal(20, tiny.PixelHeight);
+    }
+
+    [Fact]
+    public void RestoreImage_RepairsMissingPixelDimensions()
+    {
+        var item = ClipItem.Restore(
+            Guid.NewGuid(),
+            ClipContentKind.Image,
+            string.Empty,
+            rtf: null,
+            html: null,
+            imagePngBase64: Convert.ToBase64String(EncodePng(8, 6)),
+            imageFilePath: null,
+            pixelWidth: 0,
+            pixelHeight: 0,
+            DateTimeOffset.Now,
+            pinned: false,
+            signature: null,
+            sequence: 1);
+
+        Assert.Equal(8, item.PixelWidth);
+        Assert.Equal(6, item.PixelHeight);
     }
 
     private static byte[] EncodePng(int width, int height)

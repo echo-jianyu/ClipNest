@@ -72,9 +72,26 @@ public sealed class HistoryStore : IDisposable
         IReadOnlyList<ClipItem> items,
         CancellationToken cancellationToken = default)
     {
+        return await SaveAsync(
+                items,
+                Array.Empty<string>(),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public async Task<HistorySaveResult> SaveAsync(
+        IReadOnlyList<ClipItem> items,
+        IReadOnlyCollection<string> protectedImageFileNames,
+        CancellationToken cancellationToken = default)
+    {
         if (items is null)
         {
             throw new ArgumentNullException(nameof(items));
+        }
+
+        if (protectedImageFileNames is null)
+        {
+            throw new ArgumentNullException(nameof(protectedImageFileNames));
         }
 
         var snapshots = items.Select(ClipItemSnapshot.FromItem).ToList();
@@ -95,6 +112,7 @@ public sealed class HistoryStore : IDisposable
                     externalizedImages,
                     cancellationToken)
                 .ConfigureAwait(false);
+            AddProtectedImageFileNames(referencedImages, protectedImageFileNames);
             var externalizedFileNames = new Dictionary<Guid, string>();
             foreach (var image in externalizedImages)
             {
@@ -439,6 +457,34 @@ public sealed class HistoryStore : IDisposable
         }
 
         return referencedImages;
+    }
+
+    private void AddProtectedImageFileNames(
+        HashSet<string> referencedImages,
+        IEnumerable<string> protectedImageFileNames)
+    {
+        foreach (var fileName in protectedImageFileNames)
+        {
+            if (string.IsNullOrWhiteSpace(fileName))
+            {
+                continue;
+            }
+
+            var safeName = Path.GetFileName(fileName);
+            if (!string.Equals(safeName, fileName, StringComparison.Ordinal)
+                || !string.Equals(
+                    Path.GetExtension(safeName),
+                    ".png",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (File.Exists(Path.Combine(_imagesDirectory, safeName)))
+            {
+                referencedImages.Add(safeName);
+            }
+        }
     }
 
     private bool IsInsideImagesDirectory(string path)

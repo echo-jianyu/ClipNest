@@ -2,6 +2,13 @@ using System.Runtime.Serialization;
 
 namespace ClipNest.Models;
 
+public enum AppThemeMode
+{
+    FollowSystem = 0,
+    Light = 1,
+    Dark = 2
+}
+
 [DataContract]
 public sealed class AppSettings
 {
@@ -11,10 +18,10 @@ public sealed class AppSettings
     public const double DefaultWidth = 400;
     public const double DefaultHeight = 400;
     public const double MinimumHeight = 240;
-    public const double MaximumWidth = 900;
-    public const double MaximumHeight = 900;
+    public const double MaximumWidth = 1400;
+    public const double MaximumHeight = 1400;
     public const double MinimumCardFontSize = 11;
-    public const double MaximumCardFontSize = 20;
+    public const double MaximumCardFontSize = 24;
 
     private bool? _autoStartOnLogin;
     private int _layoutVersion = CurrentLayoutVersion;
@@ -56,6 +63,12 @@ public sealed class AppSettings
         get => _autoStartOnLogin ?? false;
         set => _autoStartOnLogin = value;
     }
+
+    [DataMember(Name = "themeMode", Order = 11)]
+    public AppThemeMode ThemeMode { get; set; } = AppThemeMode.FollowSystem;
+
+    [DataMember(Name = "hideTitleBar", Order = 12)]
+    public bool HideTitleBar { get; set; }
 
     internal AppSettings CreateSnapshot()
     {
@@ -99,6 +112,11 @@ public sealed class AppSettings
             : Math.Min(
                 Math.Max(CardFontSize, MinimumCardFontSize),
                 MaximumCardFontSize);
+        if (!Enum.IsDefined(typeof(AppThemeMode), ThemeMode))
+        {
+            ThemeMode = AppThemeMode.FollowSystem;
+        }
+
         _autoStartOnLogin ??= false;
     }
 

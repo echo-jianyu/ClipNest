@@ -16,7 +16,7 @@ public sealed class AppSettingsTests
     [InlineData(400, 400, 400, 400)]
     [InlineData(450, 700, 450, 700)]
     [InlineData(500, 100, 500, 240)]
-    [InlineData(1800, 1200, 900, 900)]
+    [InlineData(1800, 1200, 1400, 1200)]
     public void Normalize_ClampsWidthAndHeightIndependently(
         double requestedWidth,
         double requestedHeight,
@@ -85,6 +85,33 @@ public sealed class AppSettingsTests
         settings.Normalize();
 
         Assert.Equal(AppSettings.MinimumCardFontSize, settings.CardFontSize);
+    }
+
+    [Fact]
+    public void NewSettings_FollowSystemThemeByDefault()
+    {
+        Assert.Equal(
+            AppThemeMode.FollowSystem,
+            new AppSettings().ThemeMode);
+    }
+
+    [Fact]
+    public void NewSettings_ShowTitleBarByDefault()
+    {
+        Assert.False(new AppSettings().HideTitleBar);
+    }
+
+    [Fact]
+    public void Normalize_ResetsUnknownThemeModeToFollowSystem()
+    {
+        var settings = new AppSettings
+        {
+            ThemeMode = (AppThemeMode)99
+        };
+
+        settings.Normalize();
+
+        Assert.Equal(AppThemeMode.FollowSystem, settings.ThemeMode);
     }
 
     [Theory]

@@ -800,7 +800,19 @@ public sealed class ClipboardService : IClipboardService
 
         if (hasPng)
         {
-            var pngBytes = TryReadBytes(dataObject.GetData("PNG", true));
+            object? pngData = null;
+            try
+            {
+                pngData = dataObject.GetData("PNG", true);
+            }
+            catch (ExternalException)
+            {
+            }
+            catch (InvalidOperationException)
+            {
+            }
+
+            var pngBytes = TryReadBytes(pngData);
             if (pngBytes is not null
                 && IsUsableClipboardBitmap(TryDecodeImage(pngBytes)))
             {
@@ -811,7 +823,18 @@ public sealed class ClipboardService : IClipboardService
         if (dataObject.GetDataPresent(WpfDataFormats.Bitmap, true)
             || dataObject.GetDataPresent(WpfDataFormats.Dib, true))
         {
-            var image = WpfClipboard.GetImage();
+            BitmapSource? image = null;
+            try
+            {
+                image = WpfClipboard.GetImage();
+            }
+            catch (ExternalException)
+            {
+            }
+            catch (InvalidOperationException)
+            {
+            }
+
             if (image is not null)
             {
                 var bitmap = CopyToFrozenBitmap(image);
@@ -831,7 +854,18 @@ public sealed class ClipboardService : IClipboardService
             }
         }
 
-        var formsImage = FormsClipboard.GetImage();
+        System.Drawing.Image? formsImage = null;
+        try
+        {
+            formsImage = FormsClipboard.GetImage();
+        }
+        catch (ExternalException)
+        {
+        }
+        catch (InvalidOperationException)
+        {
+        }
+
         if (formsImage is not null
             && formsImage.Width > 1
             && formsImage.Height > 1)

@@ -263,6 +263,28 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
+    public void DeletedImage_RemainsProtectedUntilUndoWindowExpires()
+    {
+        using var clipboard = new FakeClipboardService();
+        var image = ClipItem.Create(ClipContent.FromImage(
+            Convert.FromBase64String(OnePixelPngBase64),
+            1,
+            1));
+        image.AttachImageFile(@"C:\ClipNest\images\protected.png");
+        using var viewModel = new MainViewModel(clipboard, [image]);
+
+        viewModel.DeleteCommand.Execute(image);
+
+        Assert.Equal(
+            "protected.png",
+            Assert.Single(viewModel.GetProtectedImageFileNames()));
+
+        viewModel.DiscardUndo();
+
+        Assert.Empty(viewModel.GetProtectedImageFileNames());
+    }
+
+    [Fact]
     public void AppCopy_DelegatesToClipboardWithoutCreatingAnotherRecord()
     {
         using var clipboard = new FakeClipboardService();

@@ -38,6 +38,8 @@ public sealed class SettingsStoreTests
             Assert.False(settings.HideAfterCopy);
             Assert.Equal(13.5, settings.CardFontSize);
             Assert.False(settings.AutoStartOnLogin);
+            Assert.Equal(AppThemeMode.FollowSystem, settings.ThemeMode);
+            Assert.False(settings.HideTitleBar);
         }
         finally
         {
@@ -64,7 +66,9 @@ public sealed class SettingsStoreTests
                 HotKeyKey = 0x56,
                 HideAfterCopy = true,
                 CardFontSize = 15,
-                AutoStartOnLogin = false
+                AutoStartOnLogin = false,
+                ThemeMode = AppThemeMode.Dark,
+                HideTitleBar = true
             });
 
             var settings = await store.LoadAsync();
@@ -78,6 +82,8 @@ public sealed class SettingsStoreTests
             Assert.True(settings.HideAfterCopy);
             Assert.Equal(15, settings.CardFontSize);
             Assert.False(settings.AutoStartOnLogin);
+            Assert.Equal(AppThemeMode.Dark, settings.ThemeMode);
+            Assert.True(settings.HideTitleBar);
         }
         finally
         {

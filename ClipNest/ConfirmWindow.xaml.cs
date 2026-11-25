@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Input;
+using ClipNest.Infrastructure;
 
 namespace ClipNest;
 
@@ -11,6 +12,7 @@ public partial class ConfirmWindow : Window
         string confirmText)
     {
         InitializeComponent();
+        DpiTextRendering.Apply(this);
         Title = title;
         TitleText.Text = title;
         DetailText.Text = detail;
@@ -29,7 +31,7 @@ public partial class ConfirmWindow : Window
         }
         else
         {
-            dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            WindowPlacement.CenterOnCursor(dialog);
         }
 
         return dialog.ShowDialog() == true;
