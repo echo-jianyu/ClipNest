@@ -156,19 +156,6 @@ dotnet run --project tools/UiSnapshot/UiSnapshot.csproj -c Release -- --settings
 dotnet run --project tools/UiSnapshot/UiSnapshot.csproj -c Release -- --hide-title-bar docs/clipnest-compact.png
 ```
 
-## 发布规范
-
-ClipNest 使用语义化版本 `MAJOR.MINOR.PATCH`：
-
-- `MAJOR`：不兼容的数据格式或行为变更。
-- `MINOR`：向后兼容的新功能。
-- `PATCH`：向后兼容的缺陷修复。
-
-发布前需要同步更新 `ClipNest.csproj`、`app.manifest` 和
-[CHANGELOG.md](CHANGELOG.md)，运行完整测试，提交代码并创建附注标签，例如
-`v1.6.0`。标签与 `main` 分支需要同时推送到 GitHub 和 Gitee，再在两个平台
-创建对应的 Release 并上传版本化 EXE。
-
 ## 项目结构
 
 ```text

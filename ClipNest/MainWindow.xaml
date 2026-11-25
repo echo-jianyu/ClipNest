@@ -262,6 +262,7 @@
                                         <Grid>
                                             <Border
                                                 x:Name="PinnedBar"
+                                                Panel.ZIndex="2"
                                                 Width="3"
                                                 Margin="4,8,0,8"
                                                 HorizontalAlignment="Left"
