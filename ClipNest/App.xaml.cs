@@ -103,10 +103,12 @@ public partial class App : System.Windows.Application, IDisposable
             if (startInTray)
             {
                 new WindowInteropHelper(_mainWindow).EnsureHandle();
+                WindowPlacement.ExcludeFromAltTab(_mainWindow);
             }
             else
             {
                 _mainWindow.Show();
+                WindowPlacement.ExcludeFromAltTab(_mainWindow);
             }
 
             var warnings = new[]
@@ -376,7 +378,10 @@ public partial class App : System.Windows.Application, IDisposable
             IsHitTestVisible = false,
             Background = System.Windows.Media.Brushes.Transparent
         };
+        anchor.SourceInitialized += (_, _) =>
+            WindowPlacement.ExcludeFromAltTab(anchor);
         anchor.Show();
+        WindowPlacement.ExcludeFromAltTab(anchor);
         return anchor;
     }
 

@@ -5,6 +5,43 @@ namespace ClipNest.Infrastructure;
 
 internal static class WindowPlacement
 {
+    internal static void ExcludeFromAltTab(Window window)
+    {
+        if (window is null)
+        {
+            throw new ArgumentNullException(nameof(window));
+        }
+
+        var handle = new WindowInteropHelper(window).Handle;
+        if (handle == IntPtr.Zero)
+        {
+            return;
+        }
+
+        var extendedStyle = NativeMethods
+            .GetWindowLongPtr(handle, NativeMethods.GwlExStyle)
+            .ToInt64();
+        extendedStyle |= NativeMethods.WsExToolWindow;
+        extendedStyle &= ~NativeMethods.WsExAppWindow;
+
+        NativeMethods.SetWindowLongPtr(
+            handle,
+            NativeMethods.GwlExStyle,
+            new IntPtr(extendedStyle));
+        NativeMethods.SetWindowPos(
+            handle,
+            IntPtr.Zero,
+            0,
+            0,
+            0,
+            0,
+            NativeMethods.SwpNoMove
+            | NativeMethods.SwpNoSize
+            | NativeMethods.SwpNoZOrder
+            | NativeMethods.SwpNoActivate
+            | NativeMethods.SwpFrameChanged);
+    }
+
     internal static void CenterOnCursor(Window window, double maximumHeightRatio = 1)
     {
         if (window is null)

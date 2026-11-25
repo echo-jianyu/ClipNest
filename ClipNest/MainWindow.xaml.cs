@@ -174,6 +174,7 @@ public partial class MainWindow : Window, IDisposable
         ShowActivated = activate;
         Show();
         ShowActivated = previousShowActivated;
+        WindowPlacement.ExcludeFromAltTab(this);
         WindowState = WindowState.Normal;
         Topmost = true;
         if (activate)
@@ -297,13 +298,7 @@ public partial class MainWindow : Window, IDisposable
         _windowSource?.AddHook(WindowMessageHook);
         _themeService.AttachToWindow(this);
         UpdateTextRenderingMode();
-        var extendedStyle = NativeMethods.GetWindowLongPtr(handle, NativeMethods.GwlExStyle).ToInt64();
-        extendedStyle |= NativeMethods.WsExToolWindow;
-        extendedStyle &= ~NativeMethods.WsExAppWindow;
-        NativeMethods.SetWindowLongPtr(
-            handle,
-            NativeMethods.GwlExStyle,
-            new IntPtr(extendedStyle));
+        WindowPlacement.ExcludeFromAltTab(this);
 
         try
         {
@@ -908,7 +903,14 @@ public partial class MainWindow : Window, IDisposable
         try
         {
             var dataObject = ClipboardService.BuildDragDataObject(item);
-            DragDrop.DoDragDrop(target, dataObject, DragDropEffects.Copy);
+            var dragResult = DragDrop.DoDragDrop(
+                target,
+                dataObject,
+                DragDropEffects.Copy);
+            if (dragResult != DragDropEffects.None)
+            {
+                ActivateDropTargetUnderCursor();
+            }
         }
         catch (Exception exception) when (
             exception is FormatException
@@ -925,6 +927,25 @@ public partial class MainWindow : Window, IDisposable
         {
             _isCardDragging = false;
         }
+    }
+
+    private void ActivateDropTargetUnderCursor()
+    {
+        if (!NativeMethods.GetCursorPos(out var cursorPosition))
+        {
+            return;
+        }
+
+        var targetWindow = NativeMethods.GetAncestor(
+            NativeMethods.WindowFromPoint(cursorPosition),
+            NativeMethods.GaRoot);
+        var sourceWindow = new WindowInteropHelper(this).Handle;
+        if (targetWindow == IntPtr.Zero || targetWindow == sourceWindow)
+        {
+            return;
+        }
+
+        NativeMethods.SetForegroundWindow(targetWindow);
     }
 
     private void ResetCardPointer()

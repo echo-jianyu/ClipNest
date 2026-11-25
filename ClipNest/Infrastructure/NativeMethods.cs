@@ -18,10 +18,13 @@ internal static class NativeMethods
     internal const uint EventSystemForeground = 0x0003;
     internal const uint WineventOutOfContext = 0x0000;
     internal const uint WineventSkipOwnProcess = 0x0002;
+    internal const uint SwpNoMove = 0x0002;
     internal const uint SwpNoSize = 0x0001;
     internal const uint SwpNoZOrder = 0x0004;
     internal const uint SwpNoActivate = 0x0010;
+    internal const uint SwpFrameChanged = 0x0020;
     internal const uint SwpNoOwnerZOrder = 0x0200;
+    internal const uint GaRoot = 0x0002;
 
     [UnmanagedFunctionPointer(CallingConvention.Winapi)]
     internal delegate void WinEventDelegate(
@@ -52,6 +55,12 @@ internal static class NativeMethods
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool SetForegroundWindow(IntPtr hwnd);
+
+    [DllImport("user32.dll")]
+    internal static extern IntPtr WindowFromPoint(PointStruct point);
+
+    [DllImport("user32.dll")]
+    internal static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
